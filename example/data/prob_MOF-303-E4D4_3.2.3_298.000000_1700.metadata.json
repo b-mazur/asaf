@@ -1,0 +1,14 @@
+{
+    "framework_name": "MOF-303-E4D4",
+    "system_size": [
+        3,
+        2,
+        3
+    ],
+    "molecule_name": "water_TIP4P",
+    "tail_correction": "water only",
+    "temperature": 298.0,
+    "temperature_units": "K",
+    "fugacity": 1700.0,
+    "fugacity_units": "Pa"
+}

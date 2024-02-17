@@ -1,0 +1,33 @@
+SimulationType                  MonteCarlo
+NumberOfCycles                  150000
+NumberOfInitializationCycles    50000
+PrintEvery                      1500
+RestartFile                     no
+
+ContinueAfterCrash              no
+WriteBinaryRestartFileEvery     0
+
+Movies                          no
+WriteMoviesEvery                10000
+
+Forcefield                      local
+UseChargesFromCIFFile           yes
+ChargeMethod                    Ewald
+CutOffVDW                       12.8
+
+Framework                       0
+FrameworkName                   NU-1000
+RemoveAtomNumberCodeFromLabel   yes
+UnitCells                       1 1 2
+ExternalTemperature             298
+ExternalPressure                3200
+
+PrintGhostProbabilitesEvery     1
+
+Component 0 MoleculeName             water_TIP4P
+            FugacityCoefficient      1.0
+            TranslationProbability   1.0
+            RotationProbability      1.0
+            ReinsertionProbability   1.0
+            GhostSwapProbability     1.0
+            CreateNumberOfMolecules  0

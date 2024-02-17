@@ -1,0 +1,32 @@
+SimulationType                 MonteCarlo
+NumberOfCycles                 1000000
+NumberOfInitializationCycles   50000
+PrintEvery                     10000
+RestartFile                    no
+
+ContinueAfterCrash             no
+WriteBinaryRestartFileEvery    0
+
+Forcefield                     local
+CutOffVDW                      12.8
+RemoveAtomNumberCodeFromLabel  no
+
+Framework             0
+FrameworkName         MOF-303-E4D4
+UseChargesFromCIFFile yes
+UnitCells             3 2 3
+ExternalTemperature   298
+ExternalPressure      1700
+
+Movies             no
+WriteMoviesEvery   1000
+
+PrintGhostProbabilitesEvery 1
+
+Component 0 MoleculeName             water_TIP4P
+            FugacityCoefficient      1.0
+            TranslationProbability   1.0
+            RotationProbability      1.0
+            ReinsertionProbability   1.0
+            GhostSwapProbability     1.0
+            CreateNumberOfMolecules  0
