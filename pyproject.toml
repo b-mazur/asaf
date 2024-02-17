@@ -19,3 +19,9 @@ dependencies = [
     "plotly"
 ]
 license = {text = "MIT license"}
+
+[tool.setuptools.packages.find]
+include = [
+    "asaf",
+    "asaf.mpd"
+]
