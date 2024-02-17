@@ -270,7 +270,7 @@ class MPD:
             plot_bgcolor='white',
             width=700,
             height=500,
-            margin=dict(r=30, t=30)
+            margin=dict(l=30, r=30, t=30, b=30)
         )
 
         fig.show()
