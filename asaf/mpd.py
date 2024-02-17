@@ -248,9 +248,7 @@ class MPD:
             'gridcolor': 'lightgrey',
             'mirror': True,
             'zeroline': False,
-            'ticks': 'inside',
-            'titlefont': font,
-            'tickfont': font,
+            'ticks': 'inside'
         }
 
         fig = go.Figure()
