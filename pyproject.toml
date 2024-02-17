@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "asaf"
+version = "0.0.1"
+authors = [
+    {name = "Bartosz Mazur", email = "bartosz.mazur@pwr.edu.pl"},
+]
+description = "Library to facilitate the processing and analysis of data from the grand canonical transition matrix Monte Carlo adsorption simulations."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+	"numpy",
+	"scipy",
+	"pandas",
+    "gemmi",
+    "plotly"
+]
+license = {text = "MIT license"}

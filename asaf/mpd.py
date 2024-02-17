@@ -3,7 +3,7 @@ import numpy as np
 import json
 from scipy.signal import argrelextrema
 from gemmi import cif
-from src.asaf.constants import _BOLTZMANN_CONSTANT, _AVOGADRO_CONSTANT
+from asaf.constants import _BOLTZMANN_CONSTANT, _AVOGADRO_CONSTANT
 import plotly.graph_objects as go
 from typing import Any
 
