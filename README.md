@@ -14,6 +14,4 @@
 
 ### Download
 
-To download simply type in your terminal
-
-`pip install git+https://github.com/b-mazur/asaf.git`
+To download simply type in your terminal `pip install git+https://github.com/b-mazur/asaf.git`
