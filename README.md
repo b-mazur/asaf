@@ -11,3 +11,9 @@
 - calculation of the free energy from the MPD
 - temperature extrapolation of the macrostate probability distribution
 - saving the isotherms to an AIF file
+
+### Download
+
+To download simply type in your terminal
+
+`pip install git+https://github.com/b-mazur/asaf.git`
