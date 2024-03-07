@@ -1,3 +1,4 @@
 /.spyproject/
 /venv/
 /.idea/
+/pytype.toml

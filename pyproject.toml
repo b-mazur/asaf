@@ -23,5 +23,7 @@ license = {text = "MIT license"}
 [tool.setuptools.packages.find]
 include = [
     "asaf",
-    "asaf.mpd"
+    "asaf.mpd",
+    "asaf.constants",
+    "asaf.isotherm"
 ]
