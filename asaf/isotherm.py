@@ -1,9 +1,12 @@
 import numpy as np
 import pandas as pd
 from gemmi import cif
-from asaf.mpd import quote
 import plotly.graph_objects as go
 from typing import Any, List, Optional, Dict, TypeVar
+
+
+def quote(string):
+    return f"'{string}'"
 
 
 TNum = TypeVar('TNum', float, int, List[float], List[int], np.ndarray, pd.Series)

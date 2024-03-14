@@ -28,7 +28,9 @@ class MPD:
             temperature: float,
             fugacity: float,
             metadata: dict[str, Any] | None = None,
-            prob_df: pd.DataFrame | None = None
+            prob_df: pd.DataFrame | None = None,
+            order: int = 50,
+            tolerance: float = 10.
     ) -> None:
         """
         Initialize the MPD class.
@@ -50,6 +52,10 @@ class MPD:
             Column names should be the following: 'macrostate' for macrostate value,
             'P_up' for probability of transition to the next macrostate,
             and 'P_down' for probability of transition to the previous macrostate.
+        order
+            How many points on each side use to find minimum in lnp.
+        tolerance
+            Used when checking the probability at lnp tail.
 
         Returns
         -------
@@ -69,6 +75,10 @@ class MPD:
             self.system_size = self.metadata['system_size']
         else:
             self.system_size = [1, 1, 1]
+
+        self.order = order
+        self.tolerance = tolerance
+        self.check_tail(lnp_df, order, tolerance)
 
     @classmethod
     def prob_from_csv(
@@ -278,13 +288,43 @@ class MPD:
             for k, v in metadata.items():
                 self._metadata[k] = v
 
+    @property
+    def order(self) -> int:
+        return self._order
+
+    @order.setter
+    def order(self, order: int) -> None:
+        self._order = order
+
+    @property
+    def tolerance(self) -> float:
+        return self._tolerance
+
+    @tolerance.setter
+    def tolerance(self, tolerance: float) -> None:
+        self._tolerance = tolerance
+
     def lnp(self) -> pd.Series:
         return self._lnp_df['lnp']
+
+    def check_tail(self, lnp: pd.DataFrame, order: int, tolerance: float) -> None:
+        mins = self.minimums(lnp=lnp, order=order)
+        if len(mins) == 0:
+            difference = lnp['lnp'].max() - lnp['lnp'].iloc[-1]
+        else:
+            minn = mins[mins.lnp == mins.lnp.min()].index[0]
+            lnp_b = lnp[minn + 1:].copy()
+            difference = lnp_b['lnp'].max() - lnp_b['lnp'].iloc[-1]
+
+        if difference < tolerance:
+            print(f"WARNING! lnPi at N_max has a relative value higher ({difference}) than tolerance ({tolerance}).")
+            print("The results may be erroneous. Provide the data for higher macrostate values.")
 
     def reweight(self, delta_beta_mu: float) -> pd.DataFrame:
         lnp_rw = self._lnp_df.copy()
         lnp_rw['lnp'] += delta_beta_mu * lnp_rw['macrostate']
         lnp_rw['lnp'] = self.normalize(lnp_rw['lnp'])
+        self.check_tail(lnp=lnp_rw, order=self.order, tolerance=self.tolerance)
 
         return lnp_rw
 
@@ -337,7 +377,7 @@ class MPD:
         ))
 
         xaxis_title = 'Macrostate'
-        yaxis_title = r'$\ln\Pi$'
+        yaxis_title = 'lnPi'  # r'$\ln\Pi$' plotly has a bug on using latex in jupyter lab, for now use just lnp
 
         fig.update_layout(
             font=font,
@@ -368,12 +408,14 @@ class MPD:
 
         return free_energy
 
-    def average_macrostate_at_fug(self, fug: float, order: int = 50) -> List[float]:
+    def average_macrostate_at_fug(self, fug: float, order: Optional[int] = None) -> List[float]:
         beta_0 = self._beta
         mu_0 = self._mu
         mu = self.fug_to_mu(fug, beta_0)
         delta_beta_mu = beta_0 * (mu - mu_0)
         lnp_rw = self.reweight(delta_beta_mu)
+        if order is None:
+            order = self.order
         mins = self.minimums(lnp=lnp_rw, order=order)
         if len(mins) == 0:
             return [self.average_macrostate(lnp_rw) / self._system_size_prod]
@@ -404,7 +446,7 @@ class MPD:
             pressures: np.ndarray | List[float],
             fugacity_coefficient: float = 1.0,
             saturation_pressure: Optional[float] = None,
-            order: int = 50,
+            order: Optional[int] = None,
             return_dataframe: bool = True
     ) -> pd.DataFrame | Isotherm:
         """
@@ -434,6 +476,9 @@ class MPD:
         stable_phase = []
         metastable_gas = []
         metastable_liq = []
+
+        if order is None:
+            order = self.order
 
         for fug in fugs:
             uptake = self.average_macrostate_at_fug(fug, order=order)
