@@ -377,7 +377,7 @@ class MPD:
         ))
 
         xaxis_title = 'Macrostate'
-        yaxis_title = 'lnPi'  # r'$\ln\Pi$' plotly has a bug on using latex in jupyter lab, for now use just lnp
+        yaxis_title = 'lnΠ'  # r'$\ln\Pi$' plotly has a bug on using latex in jupyter lab, for now use just lnp
 
         fig.update_layout(
             font=font,
