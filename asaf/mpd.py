@@ -7,6 +7,7 @@ from scipy.signal import argrelextrema
 from asaf.constants import _BOLTZMANN_CONSTANT, _AVOGADRO_CONSTANT
 import plotly.graph_objects as go
 from typing import Any, List, Optional, Dict, TypeVar
+from math import factorial
 
 
 def quote(string):
@@ -92,7 +93,10 @@ class MPD:
         Parameters
         ----------
         file_name
-            The name of the csv file.
+            The name of the csv file containing normalized transition probabilities P_up and P_down.
+            Must be with .csv extension. ASAF will look for the metadata file with the same name
+            but with .metadata.json extension. The metadata file must contain temperature and
+            fugacity data of the simulation.
         kwargs
             Options to pass to pandas read_csv method.
         """
@@ -125,7 +129,10 @@ class MPD:
         Parameters
         ----------
         file_name
-            The name of the csv file.
+            The name of the csv file containing natural logarithm of macrostate probability.
+            Must be with .csv extension. ASAF will look for the metadata file with the same name
+            but with .metadata.json extension. The metadata file must contain temperature and
+            fugacity data of the simulation.
         kwargs
             Options to pass to pandas read_csv method.
         """
@@ -304,8 +311,8 @@ class MPD:
     def tolerance(self, tolerance: float) -> None:
         self._tolerance = tolerance
 
-    def lnp(self) -> pd.Series:
-        return self._lnp_df['lnp']
+    def lnp(self) -> pd.DataFrame:
+        return self._lnp_df[['macrostate', 'lnp']]
 
     def check_tail(self, lnp: pd.DataFrame, order: int, tolerance: float) -> None:
         mins = self.minimums(lnp=lnp, order=order)
@@ -318,7 +325,7 @@ class MPD:
 
         if difference < tolerance:
             print(f"WARNING! lnPi at N_max has a relative value higher ({difference}) than tolerance ({tolerance}).")
-            print("The results may be erroneous. Provide the data for higher macrostate values.")
+            print("The results may be erroneous. Provide data for higher macrostate values.")
 
     def reweight(self, delta_beta_mu: float) -> pd.DataFrame:
         lnp_rw = self._lnp_df.copy()
@@ -352,7 +359,7 @@ class MPD:
 
         return self._lnp_df.iloc[min_loc]
 
-    def plot(self) -> None:
+    def plot(self, fig: Optional[go.Figure] = None, show: bool = True) -> None:
         font = {
             'family': 'Helvetica Neue',
             'size': 14,
@@ -369,7 +376,8 @@ class MPD:
             'ticks': 'inside'
         }
 
-        fig = go.Figure()
+        if fig is None:
+            fig = go.Figure()
         fig.add_trace(go.Scatter(
             x=self._lnp_df['macrostate'],
             y=self._lnp_df['lnp'],
@@ -391,7 +399,8 @@ class MPD:
             margin=dict(l=30, r=30, t=30, b=30)
         )
 
-        fig.show()
+        if show:
+            fig.show()
 
     def free_energy_at_fug(self, fug: float) -> pd.DataFrame:
         beta_0 = self._beta
@@ -541,70 +550,47 @@ class MPD:
 
     def extrapolate(
             self,
-            beta: float,
-            mu: float,
-            energy: Optional[pd.Series | np.ndarray] = None,
+            temperature: float,
+            energy: Optional[pd.DataFrame | pd.Series] = None,
             terms: int = 1,
-            inplace: bool = False
-    ) -> None | MPD:
+    ) -> MPD:
         """
         Extrapolates the MPD to a new temperature.
 
         Parameters
         ----------
-        beta
-            The inverse temperature to which to extrapolate MPD.
-        mu
-            Chemical potential to which to extrapolate MPD.
+        temperature
+            Temperature to which to extrapolate MPD.
         energy
-            Energy fluctuation data.
+            Energy fluctuation data. If None ASAF will look for data in prob_df.
         terms
             Number of Taylor series terms used for extrapolation.
-        inplace
-            Whether to modify the MPD rather than creating a new one.
 
         Returns
         -------
-        MPD or None
-            Extrapolated MPD or None if inplace is True.
+        MPD
+            Extrapolated MPD.
         """
+
         if energy is None:
             if 'term_1' in self._prob_df:
                 energy = self._prob_df.copy()
-        delta_beta_mu = self._beta * (mu - self._mu)
-        lnp_rw = self.reweight(delta_beta_mu)
-        delta_beta = beta - self._beta
-        lnp_extr = lnp_rw.copy()
-        if terms == 3:
-            lnp_extr['lnp'] = self.normalize(
-                lnp_rw['lnp'] +
-                ((mu * lnp_rw['macrostate'] - energy['term_1']) * delta_beta) +
-                (1 / 2 * energy['term_2'] * np.square(delta_beta)) +
-                (1 / 6 * energy['term_3'] * np.power(delta_beta, 3))
-            )
+            else:
+                raise ValueError('Energy related data is missing.')
 
-        elif terms == 2:
-            lnp_extr['lnp'] = self.normalize(
-                lnp_rw['lnp'] +
-                ((mu * lnp_rw['macrostate'] - energy['term_1']) * delta_beta) +
-                (1 / 2 * energy['term_2'] * np.square(delta_beta))
-            )
+        beta = self.temp_to_beta(temperature)
+        delta_beta = beta - self.beta
+        lnp_extrapolated = self.lnp().copy()
+        lnp_extrapolated['lnp'] += (self.mu * lnp_extrapolated['macrostate'] - energy['term_1']) * delta_beta
+        lnp_extrapolated['lnp'] = self.normalize(lnp_extrapolated['lnp'])
 
-        elif terms == 1:
-            lnp_extr['lnp'] = self.normalize(
-                lnp_rw['lnp'] +
-                ((mu * lnp_rw['macrostate'] - energy['term_1']) * delta_beta)
-            )
+        for i in range(2, terms+1):
+            lnp_extrapolated['lnp'] += 1 / factorial(i) * energy[f'term_{i}'] * np.power(delta_beta, i)
+            lnp_extrapolated['lnp'] = self.normalize(lnp_extrapolated['lnp'])
 
-        if inplace:
-            self._lnp_df = lnp_extr
-            self.mu = mu
-            self.beta = beta
-
-        else:
-            return MPD(
-                lnp_extr,
-                self.beta_to_temp(beta),
-                self.mu_to_fug(mu, beta),
-                self.metadata
-            )
+        return MPD(
+            lnp_df=lnp_extrapolated,
+            temperature=temperature,
+            fugacity=self.mu_to_fug(self.mu, beta),
+            metadata=self.metadata
+        )

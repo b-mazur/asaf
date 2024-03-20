@@ -175,11 +175,13 @@ class Isotherm:
             for k, v in metadata.items():
                 self._metadata[k] = v
 
-    def plot(self) -> None:
-        # TODO: allow for providing ax on which plot has to be created
+    def plot(self, fig: Optional[go.Figure] = None, show: bool = True) -> None:
         # TODO: choose what's on X-axis (pressure, fugacity, relative pressure)
         # TODO: choose unit of adsorbed amount
         # TODO: allow user to pick all of these from interactive plot
+        # TODO: add option to save to file
+        # TODO: add modes 'equilibrium', 'metastable_gas', 'metastable_liq' and their combinations with + sign
+        #       like 'equilibrium+metastable_gas', default is 'all'
 
         font = {'family': 'Helvetica Neue',
                 'size': 14,
@@ -195,7 +197,9 @@ class Isotherm:
                 'ticks': 'inside'
                 }
 
-        fig = go.Figure()
+        if fig is None:
+            fig = go.Figure()
+
         fig.add_trace(go.Scatter(x=self.pressure,
                                  y=self.amount_adsorbed,
                                  mode='lines+markers',
@@ -236,7 +240,8 @@ class Isotherm:
                           margin=dict(l=30, r=30, t=30, b=30)
                           )
 
-        fig.show()
+        if show:
+            fig.show()
 
     def to_aif(self, filename: str, user_key_mapper: Optional[Dict[str, Any]] = None) -> None:
         """
