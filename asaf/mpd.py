@@ -359,7 +359,12 @@ class MPD:
 
         return self._lnp_df.iloc[min_loc]
 
-    def plot(self, fig: Optional[go.Figure] = None, show: bool = True) -> None:
+    def plot(
+            self,
+            fig: Optional[go.Figure] = None,
+            name: Optional[str] = None,
+            show: bool = True
+    ) -> None:
         font = {
             'family': 'Helvetica Neue',
             'size': 14,
@@ -378,10 +383,12 @@ class MPD:
 
         if fig is None:
             fig = go.Figure()
+
         fig.add_trace(go.Scatter(
             x=self._lnp_df['macrostate'],
             y=self._lnp_df['lnp'],
-            mode='lines'
+            mode='lines',
+            name=name
         ))
 
         xaxis_title = 'Macrostate'
