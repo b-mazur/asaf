@@ -32,7 +32,7 @@ That's because you're looking at a prob file for a simulation in a particular N 
 probability distribution you need at least several simulations in different macrostates. The diagram below explains the 
 scheme for creating the prob file used by ASAF. 
 
-<img src="https://github.com/b-mazur/asaf/blob/main/docs/api_example.png" width="1000" class="center">
+<img src="https://github.com/b-mazur/asaf/blob/main/docs/prob_files_workflow.png" width="1000" class="center">
 
 **I don't have `.metadata.json` file.**
 
