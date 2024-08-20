@@ -6,7 +6,7 @@ analysis of data from grand canonical transition matrix Monte Carlo adsorption s
 
 ### Features:
 
-- calculation of the macrostate probability distribution (MPC) from the transition probabilities
+- calculation of the macrostate probability distribution (MPD) from the transition probabilities
 - interpolation of the transition probabilities 
 - calculation of the adsorption isotherm from the MPD
 - calculation of the free energy from the MPD
