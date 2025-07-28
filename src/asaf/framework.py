@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-from itertools import product
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -11,10 +10,12 @@ import pandas as pd
 from asaf.constants import _ATM_TO_PA, _MOLAR_GAS_CONSTANT, atomic_mass
 from gemmi import cif
 
+from itertools import product
+
 if TYPE_CHECKING:
     from typing import List, Optional
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__) 
 
 class Framework(object):
     """
@@ -32,6 +33,7 @@ class Framework(object):
         self._site_types = None
 
         self.read_cif(cif_file=cif_file, remove_site_labels=remove_site_labels)
+        self.calculate_conversion_factors()
 
     def read_cif(self, cif_file: Path, remove_site_labels: bool = False) -> None:
         """
@@ -137,7 +139,7 @@ class Framework(object):
             float: net charge in the full system (units of e).
         """
         total_uc_charge = self._dataframe["_atom_site_charge"].sum()
-        system_charge = total_uc_charge * np.prod(unit_cells)
+        system_charge = total_uc_charge * int(np.prod(unit_cells))
         if abs(system_charge) > 1e-5:
             logger.warning("System has net charge = %.5e e. Consider adjusting charges.", system_charge)
         return system_charge
@@ -159,11 +161,12 @@ class Framework(object):
             logger.error("All atomic charges are zero, cannot reduce net charge.")
             return
 
-        factor = total / abs_sum
-        self._dataframe["_atom_site_charge"] = self._dataframe["_atom_site_charge"] - (
-            self._dataframe["_atom_site_charge"].sum() * factor
-        )
-        logger.info("Adjusted charges to remove net charge (%.3e).", total)
+        correction = total * self._dataframe["_atom_site_charge"] / abs_sum
+        self._dataframe["_atom_site_charge"] = self._dataframe["_atom_site_charge"] - correction
+        resid = self._dataframe["_atom_site_charge"].sum()
+        self._dataframe["_atom_site_charge"] -= resid / len(self._dataframe["_atom_site_charge"])
+
+        logger.info("Adjusted charges to remove net charge (%.3e).", self._dataframe["_atom_site_charge"].sum())
 
     def create_system(self, unit_cells: tuple[int, int, int]):
         a0, b0, c0 = self._cell_lengths
@@ -267,18 +270,26 @@ class Framework(object):
             )
 
         box = [lx, ly, lz, xy, xz, yz]
-        box = [round(v, 14) for v in box]
+        box = tuple([round(v, 14) for v in box])
 
-        return system, box
+        vectors = (a_vec, b_vec, c_vec)
 
-    def write_metadata(self, metadata_file_name, box, unit_cells, cutoff):
+        return system, box, vectors
+
+    # def write_metadata(self, metadata_file_name, box, unit_cells, cutoff, alpha, kmax, cell_vectors):
+    def write_metadata(self, metadata_file_name, box, unit_cells, cutoff, cell_vectors):
         """Write metadata to a separate file."""
 
         metadata = {
-            "box_size": [box[:3]],
-            "tilt_factors": [box[3:]],
+            "box_size": box[:3],
+            "tilt_factors": box[3:],
+            "lattice": list(list(vec) for vec in cell_vectors),
             "unit_cells": list(unit_cells),
+            "cell_lengths": list(self._cell_lengths),
+            "cell_angles": list(self._cell_angles),
             "cutoff": cutoff,
+            # "alpha": alpha,
+            # "kmax": kmax,
             "molecules/unitcell_to_cm3stp/g": self._molecules_uc__cm3_g,
             "molecules/unitcell_to_mol/kg": self._molecules_uc__mol_kg,
         }
@@ -287,6 +298,8 @@ class Framework(object):
         with open(f"{metadata_file_name}.metadata.json", "w") as metadata_f_out:
             json.dump(metadata, metadata_f_out, indent=4)
 
+        return metadata
+
     def get_site_types(self):
         self._site_types = (
             self._dataframe.groupby(by="_atom_site_label").first().reset_index()
@@ -294,12 +307,12 @@ class Framework(object):
 
     def set_force_field(
         self,
-        sigmas=None,
-        sigma_by="_atom_site_type_symbol",
-        epsilons=None,
-        epsilon_by="_atom_site_type_symbol",
-        charges=None,
-        charge_by="_atom_site_label",
+        sigmas: Optional[dict] = None,
+        sigma_by: str = "_atom_site_type_symbol",
+        epsilons: Optional[dict] = None,
+        epsilon_by: str = "_atom_site_type_symbol",
+        charges: Optional[dict] = None,
+        charge_by: str = "_atom_site_label",
     ):
         self.get_site_types()
 
@@ -332,44 +345,146 @@ class Framework(object):
 
         self._force_field = ff
 
+    def average_charges(self, tolerance:float = 0.1):
+        from pymatgen.core.structure import Structure
+        from pymatgen.core.lattice import Lattice
+        from pymatgen.analysis.molecule_structure_comparator import CovalentRadius
+        from collections import defaultdict
+
+        a, b, c = self._cell_lengths
+        alpha, beta, gamma = self._cell_angles
+
+        lattice = Lattice.from_parameters(
+            a=a, b=b, c=c, alpha=alpha, beta=beta, gamma=gamma
+        )
+
+        structure = Structure(
+            lattice=lattice,
+            species=self._dataframe._atom_site_type_symbol.to_list(),
+            coords=self._dataframe[
+                ["_atom_site_fract_x", "_atom_site_fract_y", "_atom_site_fract_z"]
+            ].to_numpy(),
+            labels=self._dataframe._atom_site_label.to_list(),
+            site_properties={"charge": self._dataframe._atom_site_charge.to_list()},
+        )
+
+        n_sites = len(structure)
+        radii = []
+        for site in structure:
+            r = CovalentRadius.radius.get(site.specie.symbol, None)
+            if r is None:
+                raise ValueError(f"No covalent radius for element {site.specie}")
+            radii.append(r)
+        max_rad = max(radii)
+
+        max_cutoff = 2 * max_rad + tolerance
+        all_nbrs = structure.get_all_neighbors(max_cutoff, include_index=True)
+
+        first_shell = {}
+        for i, nbr_list in enumerate(all_nbrs):
+            bonded = []
+            for nb in nbr_list:
+                dist = nb[1]
+                j = int(nb[2])
+                # bond if within sum-of-radii + tolerance
+                if dist <= (radii[i] + radii[j] + tolerance):
+                    bonded.append(j)
+            first_shell[i] = sorted(set(bonded))
+
+        second_shell = {}
+        for i in range(n_sites):
+            sec = set()
+            for j in first_shell[i]:
+                sec.update(first_shell[j])
+            sec.discard(i)
+            sec.difference_update(first_shell[i])
+            second_shell[i] = sorted(sec)
+
+        groups = defaultdict(list)
+        for i in range(n_sites):
+            el = structure[i].specie.symbol
+            shell1 = tuple(sorted(structure[j].specie.symbol for j in first_shell[i]))
+            shell2 = tuple(sorted(structure[j].specie.symbol for j in second_shell[i]))
+            key = (el, shell1, shell2)
+            groups[key].append(i)
+
+        logger.info("Found %i groups.", len(groups))
+
+
+
+
+
+
+
+    def write_xyz_file(
+        self,
+        file_name: str,
+        system: pd.DataFrame,
+        vectors: tuple[np.ndarray, np.ndarray, np.ndarray],
+    ) -> None:
+        """Writes system in extxyz file format."""
+
+        n_sites = system.shape[0]
+        flat_vectors = np.concatenate(vectors)
+        vectors_str = " ".join(f"{x:.10f}" for x in flat_vectors)
+
+        with open(f"{file_name}.xyz", "w") as xyz_file:
+            print(n_sites, file=xyz_file)
+            print(
+                f"Lattice=\"{vectors_str}\" Properties=species:S:1:pos:R:3", file=xyz_file
+            )
+            print(system.to_string(header=False, index=False), file=xyz_file)
+
+    def dl_poly_ewald(self, cutoff: float, box: tuple, tolerance: float = 0.00001):
+        """Parameters from the DL_POLY Algorithm
+        https://doi.org/10.1080/002689798167881
+        thanks to Daniel W. Siderius
+        """
+        # DL_POLY Algorithm
+        eps = min(tolerance, 0.5)
+        xi = np.sqrt(np.abs(np.log(eps * cutoff)))
+        alpha = np.sqrt(np.abs(np.log(eps * cutoff * xi))) / cutoff
+        chi = np.sqrt(-np.log(eps * cutoff * ((2.0 * xi * alpha) ** 2)))
+        kmax = [int(0.25 + box[i] * alpha * chi / np.pi) for i in range(3)]
+
+        return alpha, kmax
+
     def write_fstprt(
         self,
         unit_cells: tuple[int, int, int] = (1, 1, 1),
         file_name: Optional = None,
         cutoff: float = 12.8,
-    ):
+        return_metadata: bool = False,
+        ewald_tolerance: float = 0.00001
+    ) -> None | dict:
         """Writes molecule file with framework for FEASST simulation software."""
 
         if len(unit_cells) != 3 or not all(isinstance(n, int) for n in unit_cells):
             raise ValueError("`unit_cells` must be three positive integers")
 
-        system, box = self.create_system(unit_cells)
-        self.check_net_charge(unit_cells)
-
-        configuration_line = (
-            "Configuation "
-            + f"side_length0 {box[0]} "
-            + f"side_length1 {box[1]} "
-            + f"side_length2 {box[2]} "
-            + f"xy {box[3]:.14f} "
-            + f"xz {box[4]:.14f} "
-            + f"yz {box[5]:.14f}"
-        )
-        logger.info(configuration_line)
+        system, box, vectors = self.create_system(unit_cells)
+        net_charge = self.check_net_charge(unit_cells)
+        logger.info("Net charge is %e", net_charge)
+        # alpha, kmax = self.dl_poly_ewald(
+        #     cutoff=cutoff, box=box, tolerance=ewald_tolerance
+        # )
 
         n_sites = system.shape[0]
 
         if file_name is None:
             file_name = self._cif_file.with_suffix("")
 
-        self.write_metadata(
-            metadata_file_name=file_name, box=box, unit_cells=unit_cells, cutoff=cutoff
+        metadata = self.write_metadata(
+            metadata_file_name=file_name,
+            box=box,
+            unit_cells=unit_cells,
+            cutoff=cutoff,
+            # alpha=alpha,
+            # kmax=kmax,
+            cell_vectors=vectors,
         )
 
-        with open(f"{file_name}.xyz", "w") as xyz_file:
-            print(n_sites, file=xyz_file)
-            print("", file=xyz_file)
-            print(system.to_string(header=False, index=False), file=xyz_file)
+        self.write_xyz_file(file_name, system, vectors)
 
         self.set_force_field()
         sites_to_num = pd.Series(
@@ -379,7 +494,7 @@ class Framework(object):
             system["_atom_site_label"].map(sites_to_num).astype(int)
         )
 
-        file = f"""# LAMMPS-inspired data file
+        file = f"""#
 
 {n_sites} sites
 
@@ -416,3 +531,9 @@ Site Properties
 
         with open(f"{file_name}.fstprt", "w") as fstprt_file:
             print(file, file=fstprt_file)
+
+        if return_metadata:
+            return metadata
+        else:
+            return None
+

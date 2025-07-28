@@ -51,3 +51,9 @@ Make sure that you are using modified version of RASPA.
 In general you can play with `PrintGhostProbabilitesEvery` parameter. A more frequent print will be useful when you want
 to use energy fluctuations to extrapolate MPD, otherwise a value similar to that used in `PrintEvery` will be sufficient
 to monitor the simulation. 
+
+> [!NOTE]
+> this is note
+
+> [!WARNING]
+> This is warning 

@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import pandas as pd
 import numpy as np
 import json
@@ -25,12 +26,11 @@ class MPD:
 
     def __init__(
         self,
-        lnp_df: pd.DataFrame,
+        dataframe: pd.DataFrame,
         temperature: float,
         beta_mu: Optional[float] = None,
         fugacity: Optional[float] = None,
         metadata: Optional[dict[str, Any]] = None,
-        prob_df: Optional[pd.DataFrame] = None,
         order: int = 50,
         tolerance: float = 10.0,
     ) -> None:
@@ -39,10 +39,8 @@ class MPD:
 
         Parameters
         ----------
-        lnp_df
-            a pandas dataframe containing the macrostate probability distribution.
-            Column names should be the following: 'macrostate' for macrostate value
-            and 'lnp' for natural logarithm of the given macrostate probability
+        dataframe
+            a pandas dataframe with state specific data
         temperature
             temperature (in K) at which the simulation was performed
         beta_mu
@@ -53,11 +51,6 @@ class MPD:
             or fugacity must be specified
         metadata
             a dictionary with the simulation metadata
-        prob_df
-            a pandas dataframe containing the transition probabilities.
-            Column names should be the following: 'macrostate' for macrostate value,
-            'P_up' for probability of transition to the next macrostate,
-            and 'P_down' for probability of transition to the previous macrostate
         order
             how many points on each side use to find minimum in lnp
         tolerance
@@ -79,8 +72,30 @@ class MPD:
             self._beta_mu = beta_mu
             self.mu = beta_mu / self.beta
 
-        self._lnp_df = lnp_df
-        self._prob_df = prob_df
+        lnp_headers = ['macrostate', 'lnp']
+        prob_headers = ['macrostate', 'P_up', 'P_down']
+
+        have_lnp = set(lnp_headers).issubset(dataframe.columns)
+        have_prob = set(prob_headers).issubset(dataframe.columns)
+
+        if not (have_lnp or have_prob):
+            all_required = set(lnp_headers) | set(prob_headers)
+            missing = all_required - set(dataframe.columns)
+            raise ValueError(f"Some of the columns names {missing} are missing.")
+
+        self._dataframe = dataframe
+
+        if have_lnp:
+            self._lnp_df = self._dataframe[lnp_headers]
+        else:
+            lnp_df = self.calculate_lnp(dataframe[prob_headers])
+            merged = lnp_df.merge(dataframe, on='macrostate', how='left', suffixes=('', '_inp'))
+            self._dataframe = merged
+            self._lnp_df = self._dataframe[lnp_headers]
+            
+        if have_prob:
+            self._prob_df = self._dataframe[prob_headers]
+
         self._metadata = metadata or {}
         self.order = order
         self.tolerance = tolerance
@@ -92,31 +107,15 @@ class MPD:
         else:
             self.system_size = [1, 1, 1]
 
-        self.check_tail(lnp_df, order, tolerance)
+        self.check_tail(order, tolerance)
 
     @classmethod
-    def from_csv(cls, file_name: str, **kwargs: object) -> None:
+    def from_csv(cls, file_name: str, **kwargs: object) -> MPD:
         """
         Reads natural logarithm of macrostates probability or transition probabilities from a csv file.
         """
 
         df = pd.read_csv(file_name, **kwargs)
-        if "lnp" in df.columns:
-            lnp_df = df[["macrostate", "lnp"]].copy()
-            if "P_up" in df.columns and "P_down" in df.columns:
-                prob_df = df[["macrostate", "P_up", "P_down"]].copy()
-            else:
-                prob_df = None
-        elif "P_up" in df.columns and "P_down" in df.columns:
-            prob_df = df[["macrostate", "P_up", "P_down"]].copy()
-            if prob_df["macrostate"].diff().mean() != 1:
-                print("Interpolating data...")
-                prob_df = cls.interpolate_df(prob_df)
-            lnp_df = cls.calculate_lnp(prob_df)
-        else:
-            raise ValueError(
-                "The csv file must contain either 'lnp' column or 'P_up' and 'P_down' columns."
-            )
 
         metadata_fname = file_name.removesuffix(".csv") + ".metadata.json"
         with open(metadata_fname) as f:
@@ -134,105 +133,12 @@ class MPD:
             raise ValueError("Metadata must contain 'beta_mu' or/and 'fugacity'.")
 
         return cls(
-            lnp_df=lnp_df,
+            dataframe=df,
             temperature=temperature,
             beta_mu=beta_mu,
             fugacity=fugacity,
             metadata=metadata,
-            prob_df=prob_df,
         )
-
-    #
-    # @classmethod
-    # def prob_from_csv(cls, file_name: str, **kwargs: object) -> None:
-    #     """
-    #     Reads transition probabilities from a csv file.
-    #
-    #     Parameters
-    #     ----------
-    #     file_name
-    #         The name of the csv file containing normalized transition probabilities P_up and P_down.
-    #         Must be with .csv extension. ASAF will look for the metadata file with the same name
-    #         but with .metadata.json extension. The metadata file must contain temperature and
-    #         fugacity data of the simulation.
-    #     kwargs
-    #         Options to pass to pandas read_csv method.
-    #     """
-    #     prob_df = pd.read_csv(file_name, **kwargs)
-    #
-    #     # interpolate data for macrostates which were not sampled
-    #     if prob_df["macrostate"].diff().mean() != 1:
-    #         print("Interpolating data...")
-    #         prob_df = MPD.interpolate_df(prob_df)
-    #
-    #     lnp_df = MPD.calculate_lnp(prob_df)
-    #
-    #     metadata_fname = file_name.removesuffix(".csv") + ".metadata.json"
-    #     with open(metadata_fname) as f:
-    #         metadata = json.load(f)
-    #
-    #     beta = metadata.get("beta")
-    #     temperature = metadata.get("temperature")
-    #     if (beta is None) and (temperature is None):
-    #         raise ValueError("Metadata must contain 'beta' or/and 'temperature'.")
-    #
-    #     beta_mu = metadata.get("beta_mu")
-    #     fugacity = metadata.get("fugacity")
-    #     if (beta_mu is None) and (fugacity is None):
-    #         raise ValueError("Metadata must contain 'beta_mu' or/and 'fugacity'.")
-    #
-    #     return cls(
-    #         lnp_df=lnp_df,
-    #         beta=beta,
-    #         temperature=temperature,
-    #         beta_mu=beta_mu,
-    #         fugacity=fugacity,
-    #         metadata=metadata,
-    #         prob_df=prob_df,
-    #     )
-    #
-    # @classmethod
-    # def lnp_from_csv(cls, file_name: str, **kwargs: object) -> None:
-    #     """
-    #     Reads the natural logarithm of macrostates probability from a csv file.
-    #
-    #     Parameters
-    #     ----------
-    #     file_name
-    #         The name of the csv file containing natural logarithm of macrostate probability.
-    #         Must be with .csv extension. ASAF will look for the metadata file with the same name
-    #         but with .metadata.json extension. The metadata file must contain temperature and
-    #         fugacity data of the simulation.
-    #     kwargs
-    #         Options to pass to pandas read_csv method.
-    #     """
-    #
-    #     prob_df = pd.read_csv(file_name, **kwargs)
-    #
-    #     lnp_df = prob_df[["macrostate", "lnp"]].copy()
-    #
-    #     metadata_fname = file_name.removesuffix(".csv") + ".metadata.json"
-    #     with open(metadata_fname) as f:
-    #         metadata = json.load(f)
-    #
-    #     beta = metadata.get("beta")
-    #     temperature = metadata.get("temperature")
-    #     if (beta is None) and (temperature is None):
-    #         raise ValueError("Metadata must contain 'beta' or/and 'temperature'.")
-    #
-    #     beta_mu = metadata.get("beta_mu")
-    #     fugacity = metadata.get("fugacity")
-    #     if (beta_mu is None) and (fugacity is None):
-    #         raise ValueError("Metadata must contain 'beta_mu' or/and 'fugacity'.")
-    #
-    #     return cls(
-    #         lnp_df=lnp_df,
-    #         beta=beta,
-    #         temperature=temperature,
-    #         beta_mu=beta_mu,
-    #         fugacity=fugacity,
-    #         metadata=metadata,
-    #     )
 
     @staticmethod
     def interpolate_df(df: pd.DataFrame, based_on: str = "macrostate") -> pd.DataFrame:
@@ -294,6 +200,11 @@ class MPD:
            (Vol. 108, Issue 51, pp. 19595–19606). American Chemical Society (ACS). https://doi.org/10.1021/jp040218y
 
         """
+        diff = prob_df["macrostate"].diff()
+        if not (diff.iloc[1:] == 1).all():
+            print("Interpolating data...")
+            prob_df = MPD.interpolate_df(prob_df)
+
         dlnp = np.log(prob_df["P_up"].shift(1) / prob_df["P_down"])
         dlnp.iloc[0] = 0
         lnp_df = pd.DataFrame(
@@ -402,7 +313,9 @@ class MPD:
     def lnp(self) -> pd.DataFrame:
         return self._lnp_df[["macrostate", "lnp"]]
 
-    def check_tail(self, lnp: pd.DataFrame, order: int, tolerance: float) -> None:
+    def check_tail(self, order: int, tolerance: float, lnp: Optional[pd.DataFrame] = None) -> None:
+        if lnp is None:
+            lnp = self.lnp()
         mins = self.minimums(lnp=lnp, order=order)
         if len(mins) == 0:
             difference = lnp["lnp"].max() - lnp["lnp"].iloc[-1]
@@ -574,7 +487,8 @@ class MPD:
         lnp_rw = self.reweight(delta_beta_mu)
         if order is None:
             order = self.order
-        mins = self.minimums(lnp=lnp_rw, order=order)
+        mins = self.minimums(lnp=lnp_rw['lnp'], order=order)
+
         if len(mins) == 0:
             return [self.average_macrostate(lnp_rw) / self._system_size_prod]
         else:
@@ -735,7 +649,7 @@ class MPD:
             lnp_extrapolated["lnp"] = self.normalize(lnp_extrapolated["lnp"])
 
         return MPD(
-            lnp_df=lnp_extrapolated,
+            dataframe=lnp_extrapolated,
             temperature=temperature,
             fugacity=self.mu_to_fugacity(self.mu, beta),
             metadata=self.metadata,

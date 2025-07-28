@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import numpy as np
 import pandas as pd
 from gemmi import cif
@@ -183,145 +185,282 @@ class Isotherm:
             for k, v in metadata.items():
                 self._metadata[k] = v
 
+    # def plot(
+    #     self,
+    #     label: Optional[str] = None,
+    #     fig: Optional[go.Figure] = None,
+    #     x_axis: str = "pressure",
+    #     y_axis: str = "molecules/unitcell",
+    #     trace_kwargs: Optional[Dict[str, Any]] = None,
+    #     layout_kwargs: Optional[Dict[str, Any]] = None,
+    # ) -> go.Figure:
+    #     """
+    #     Plot an isotherm (stable + metastable gas + metastable liquid) and group all traces
+    #     under a single legend entry.
+    #     """
+    #
+    #     # trace_kwargs = trace_kwargs or {}
+    #     # layout_kwargs = layout_kwargs or {}
+    #
+    #     if not color:
+    #         default_colors = pc.qualitative.Plotly
+    #         calls = getattr(fig, "_plot_calls", 0)
+    #         color = default_colors[calls % len(default_colors)]
+    #         fig._plot_calls = calls + 1
+    #
+    #     if not marker:
+    #         marker = 'circle'
+    #
+    #     font = dict(family="Helvetica Neue", size=14, color="black")
+    #     axes_common = dict(
+    #         showline=True,
+    #         linewidth=1,
+    #         linecolor="black",
+    #         gridcolor="lightgrey",
+    #         mirror=True,
+    #         zeroline=False,
+    #         ticks="inside",
+    #     )
+    #
+    #     # get or create figure
+    #     show_immediately = False
+    #     if fig is None:
+    #         fig = go.Figure()
+    #         show_immediately = True
+    #
+    #     # # cycle through Plotly qualitative palette
+    #     # calls = getattr(fig, "_plot_calls", 0)
+    #     # color = default_colors[calls % len(default_colors)]
+    #     # fig._plot_calls = calls + 1
+    #
+    #     # --- choose x data & title ---
+    #     axis_map = {
+    #         "pressure": (self.pressure, f"Pressure ({self.pressure_unit})"),
+    #         "fugacity": (self.fugacity, f"Fugacity ({self.pressure_unit})"),
+    #         "relative_pressure": (self._dataframe["p/p0"], "p/p₀"),
+    #         "p/p0": (self._dataframe["p/p0"], "p/p₀"),
+    #     }
+    #     try:
+    #         x_vals, x_title = axis_map[x_axis]
+    #     except KeyError:
+    #         valid = "', '".join(axis_map)
+    #         raise ValueError(f"x_axis must be one of '{valid}'. Got {x_axis!r}.")
+    #
+    #     original_unit = self.uptake_unit
+    #     if y_axis != original_unit:
+    #         self.set_uptake_unit(y_axis)
+    #
+    #     legend_name = label or "Uptake"
+    #
+    #     lg = dict(legendgroup=legend_name)
+    #     fig.add_trace(
+    #         go.Scatter(
+    #             x=x_vals,
+    #             y=self.amount_adsorbed,
+    #             mode="lines+markers",
+    #             name=legend_name,
+    #             line=dict(color=color),
+    #             marker=dict(color=color, symbol=marker),
+    #             **lg,
+    #             **kwargs
+    #         )
+    #     )
+    #     if self.metastable_gas is not None:
+    #         fig.add_trace(
+    #             go.Scatter(
+    #                 x=x_vals,
+    #                 y=self.metastable_gas,
+    #                 mode="lines",
+    #                 name=legend_name,
+    #                 line=dict(color=color, dash="dash"),
+    #                 showlegend=False,
+    #                 **lg,
+    #                 **kwargs
+    #             )
+    #         )
+    #     if self.metastable_liq is not None:
+    #         fig.add_trace(
+    #             go.Scatter(
+    #                 x=x_vals,
+    #                 y=self.metastable_liq,
+    #                 mode="lines",
+    #                 name=legend_name,
+    #                 line=dict(color=color, dash="dash"),
+    #                 showlegend=False,
+    #                 **lg,
+    #                 **kwargs
+    #             )
+    #         )
+    #
+    #     # restore original unit
+    #     if y_axis != original_unit:
+    #         self.set_uptake_unit(original_unit)
+    #
+    #     fig.update_layout(
+    #         font=font,
+    #         xaxis=axes_common,
+    #         xaxis_title=x_title,
+    #         yaxis=axes_common,
+    #         yaxis_title=f"Uptake ({y_axis})",
+    #         plot_bgcolor="white",
+    #         width=700,
+    #         height=500,
+    #         margin=dict(l=30, r=30, t=30, b=30),
+    #         legend=dict(traceorder="grouped"),
+    #     )
+    #
+    #     if show_immediately:
+    #         fig.show()
+    #
+    #     return fig
+
     def plot(
         self,
-        name: Optional[str] = None,
+        label: Optional[str] = None,
         fig: Optional[go.Figure] = None,
-        x_axis: Optional[str] = "pressure",
-        y_axis: Optional[str] = "molecules/unitcell",
-    ) -> None:
-        # TODO: allow user to pick all of these from interactive plot
-        # TODO: add option to save to file
-        # TODO: add modes 'equilibrium', 'metastable_gas', 'metastable_liq' and their combinations with + sign
-        #       like 'equilibrium+metastable_gas', default is 'all'
+        x_axis: str = "pressure",
+        y_axis: str = "molecules/unitcell",
+        trace_kwargs: Optional[Dict[str, Any]] = None,
+        layout_kwargs: Optional[Dict[str, Any]] = None,
+    ) -> go.Figure:
+        """
+        Plot an isotherm (stable + metastable gas + metastable liquid) and group
+        all traces under a single legend entry. You can pass any kwargs through
+        `trace_kwargs` or `layout_kwargs`; missing values will be filled in by defaults.
+        """
 
-        default_colors = pc.qualitative.Plotly
+        trace_kwargs = trace_kwargs or {}
+        layout_kwargs = layout_kwargs or {}
 
-        font = {"family": "Helvetica Neue", "size": 14, "color": "black"}
+        # look for an explicit color in trace_kwargs
+        explicit_color = None
+        if "line" in trace_kwargs and isinstance(trace_kwargs["line"], dict):
+            explicit_color = trace_kwargs["line"].get("color")
+        # if "marker" in trace_kwargs and isinstance(trace_kwargs["marker"], dict):
+        #     explicit_color = explicit_color or trace_kwargs["marker"].get("color")
 
-        axes = {
-            "showline": True,
-            "linewidth": 1,
-            "linecolor": "black",
-            "gridcolor": "lightgrey",
-            "mirror": True,
-            "zeroline": False,
-            "ticks": "inside",
+        if explicit_color:
+            color = explicit_color
+        else:
+            default_colors = pc.qualitative.Vivid
+            calls = getattr(fig, "_plot_calls", 0)
+            color = default_colors[calls % len(default_colors)]
+            fig._plot_calls = calls + 1
+
+        axis_map = {
+            "pressure": (self.pressure, f"Pressure ({self.pressure_unit})"),
+            "fugacity": (self.fugacity, f"Fugacity ({self.pressure_unit})"),
+            "relative_pressure": (self._dataframe["p/p0"], "p/p₀"),
+            "p/p0": (self._dataframe["p/p0"], "p/p₀"),
         }
 
-        show = False
-        if fig is None:
-            fig = go.Figure()
-            show = True
+        if x_axis not in axis_map:
+            valid = "', '".join(axis_map)
+            raise ValueError(f"x_axis must be one of '{valid}'. Got {x_axis!r}.")
 
-        if not hasattr(fig, "_plot_calls"):
-            fig._plot_calls = 0
-        color_index = fig._plot_calls % len(default_colors)
-        base_color = default_colors[color_index]
-        fig._plot_calls += 1
+        x_vals, x_title = axis_map[x_axis]
 
-        if x_axis == "pressure":
-            x = self.pressure
-            x_axis_title = f"Pressure ({self.pressure_unit})"
-        elif x_axis == "fugacity":
-            x = self.fugacity
-            x_axis_title = f"Fugacity ({self.pressure_unit})"
-        elif x_axis == "relative_pressure":
-            x = self._dataframe["p/p0"]
-            x_axis_title = "p/p₀"
-        else:
-            raise ValueError(
-                f"x_axis must be one of 'pressure', 'fugacity', 'relative_pressure'. Got {x_axis}."
-            )
-
-        initial_uptake_unit = self.uptake_unit
-
-        if y_axis != initial_uptake_unit:
+        original_unit = self.uptake_unit
+        if y_axis != original_unit:
             self.set_uptake_unit(y_axis)
 
-        fig.add_trace(
-            go.Scatter(
-                x=x,
-                y=self.amount_adsorbed,
-                mode="lines+markers",
-                name=name,
-                line=dict(color=base_color),
-            )
-        )
+        legend_name = label or "Uptake"
+        lg = dict(legendgroup=legend_name)
+
+        default_stable = {
+            "x": x_vals,
+            "y": self.amount_adsorbed,
+            "mode": "lines+markers",
+            "name": legend_name,
+            "line": dict(color=color),
+            "marker": dict(
+                color=color,
+                symbol=trace_kwargs.get("marker", {}).get("symbol", "circle"),
+            ),
+            **lg,
+        }
+
+        user_line = trace_kwargs.get("line", {})
+        user_marker = trace_kwargs.get("marker", {})
+
+        stable_line = {**default_stable["line"], **user_line}
+        stable_marker = {**default_stable["marker"], **user_marker}
+
+        merged_stable = {
+            **default_stable,
+            **trace_kwargs,
+            "line": stable_line,
+            "marker": stable_marker,
+        }
+        
+        # get or create figure
+        show_immediately = False
+        if fig is None:
+            fig = go.Figure()
+            show_immediately = True
+
+        fig.add_trace(go.Scatter(**merged_stable))
+
+        # metastable defaults: just dashed line, no markers, and no extra legend entry
+        default_meta = {
+            "x": x_vals,
+            "mode": "lines",
+            "name": legend_name,
+            "line": dict(color=color, dash="dash"),
+            "showlegend": False,
+            **lg,
+        }
+
+        meta_line = {**default_meta["line"], **user_line}
+        meta_trace_kwargs = {
+            **default_meta,
+            **trace_kwargs,
+            "line": meta_line,
+        }
 
         if self.metastable_gas is not None:
-            fig.add_trace(
-                go.Scatter(
-                    x=x,
-                    y=self.metastable_gas,
-                    mode="lines",
-                    line=dict(color=base_color, dash="dash"),
-                )
-            )
-
-        show_liq_legend = True if self.metastable_liq is None else False
-
+            fig.add_trace(go.Scatter(y=self.metastable_gas, **meta_trace_kwargs))
         if self.metastable_liq is not None:
-            fig.add_trace(
-                go.Scatter(
-                    x=x,
-                    y=self.metastable_liq,
-                    mode="lines",
-                    line=dict(color=base_color, dash="dash"),
-                    showlegend=show_liq_legend,
-                )
-            )
+            fig.add_trace(go.Scatter(y=self.metastable_liq, **meta_trace_kwargs))
 
-        # fig.data = tuple(
-        #     trace
-        #     for trace in fig.data
-        #     if getattr(trace, "legendgroup", None) != "Phase type"
-        # )
-        #
-        # fig.add_trace(
-        #     go.Scatter(
-        #         x=[None],
-        #         y=[None],
-        #         mode="lines+markers",
-        #         marker=dict(symbol="circle", color="gray"),
-        #         line=dict(color="gray", dash="solid"),
-        #         name="Stable phase",
-        #         legendgroup="Phase type",
-        #         legendgrouptitle={"text": "Phase type"},
-        #         showlegend=True,
-        #         hoverinfo="none",  # no hover on dummy
-        #     )
-        # )
-        # fig.add_trace(
-        #     go.Scatter(
-        #         x=[None],
-        #         y=[None],
-        #         mode="lines",
-        #         line=dict(color="gray", dash="dash"),
-        #         name="Metastable phase",
-        #         legendgroup="Phase type",
-        #         showlegend=True,
-        #         hoverinfo="none",
-        #     )
-        # )
+        # restore original unit
+        if y_axis != original_unit:
+            self.set_uptake_unit(original_unit)
 
-        y_axis_title = f"Uptake ({self.uptake_unit})"
-
-        fig.update_layout(
-            font=font,
-            xaxis=axes,
-            xaxis_title=x_axis_title,
-            yaxis=axes,
-            yaxis_title=y_axis_title,
+        base_layout = dict(
+            font=dict(family="Helvetica Neue", size=14, color="black"),
+            xaxis=dict(
+                showline=True,
+                linewidth=1,
+                linecolor="black",
+                gridcolor="lightgrey",
+                mirror=True,
+                zeroline=False,
+                ticks="inside",
+                title=x_title,
+            ),
+            yaxis=dict(
+                showline=True,
+                linewidth=1,
+                linecolor="black",
+                gridcolor="lightgrey",
+                mirror=True,
+                zeroline=False,
+                ticks="inside",
+                title=f"Uptake ({y_axis})",
+            ),
             plot_bgcolor="white",
             width=700,
             height=500,
             margin=dict(l=30, r=30, t=30, b=30),
             legend=dict(traceorder="grouped"),
         )
+        fig.update_layout(**{**base_layout, **layout_kwargs})
 
-        if show:
+        if show_immediately:
             fig.show()
+
+        return fig
 
     def to_aif(
         self, filename: str, user_key_mapper: Optional[Dict[str, Any]] = None
