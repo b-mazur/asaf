@@ -6,7 +6,7 @@ from math import factorial
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from typing import Any, Dict, List, Optional, Tuple, TypeVar, Union
+    from typing import Any, Dict, List, Optional, Tuple, Union
 
     from numpy.typing import ArrayLike
 
@@ -17,8 +17,6 @@ from scipy.signal import argrelextrema
 
 from asaf.constants import _AVOGADRO_CONSTANT, _BOLTZMANN_CONSTANT
 from asaf.isotherm import Isotherm
-
-TNum = TypeVar("TNum", float, int, List[float], List[int], np.ndarray, pd.Series)
 
 
 # TODO: move static functions to utility module
@@ -80,18 +78,12 @@ class MPD:
 
         self._dataframe = dataframe
 
-        if have_lnp:
-            self._lnp_df = self._dataframe[lnp_headers]
-        else:
+        if not have_lnp:
             lnp_df = self.calculate_lnp(dataframe[prob_headers])
             merged = lnp_df.merge(
                 dataframe, on="macrostate", how="left", suffixes=("", "_inp")
             )
             self._dataframe = merged
-            self._lnp_df = self._dataframe[lnp_headers]
-
-        if have_prob:
-            self._prob_df = self._dataframe[prob_headers]
 
         self._metadata = metadata or {}
         self.order = order
@@ -190,7 +182,7 @@ class MPD:
             prob_df = MPD.interpolate_df(prob_df)
 
         dlnp = np.log(prob_df["P_up"].shift(1) / prob_df["P_down"])
-        dlnp.iloc[0] = 0
+        dlnp[0] = 0
         lnp_df = pd.DataFrame(
             data={
                 "macrostate": prob_df["macrostate"],
@@ -204,25 +196,25 @@ class MPD:
         return self._dataframe
 
     @staticmethod
-    def beta_to_temperature(beta: TNum) -> TNum:
+    def beta_to_temperature(beta: ArrayLike) -> ArrayLike:
         """Convert beta to temperature using Boltzmann constant."""
         temp = 1 / _BOLTZMANN_CONSTANT / beta
         return temp
 
     @staticmethod
-    def temperature_to_beta(temp: TNum) -> TNum:
+    def temperature_to_beta(temp: ArrayLike) -> ArrayLike:
         """Convert temperature to beta using Boltzmann constant."""
         beta = 1 / _BOLTZMANN_CONSTANT / temp
         return beta
 
     @staticmethod
-    def fugacity_to_mu(fugacity: TNum, beta: float) -> TNum:
+    def fugacity_to_mu(fugacity: ArrayLike, beta: float) -> ArrayLike:
         """Convert fugacity (in Pa) to chemical potential (in J A^-3)."""
         mu = np.log(fugacity * 1e-30 * beta) / beta  # J A^-3
         return mu
 
     @staticmethod
-    def mu_to_fugacity(mu: TNum, beta: float) -> TNum:
+    def mu_to_fugacity(mu: ArrayLike, beta: float) -> ArrayLike:
         """Convert chemical potential (in J A^-3) to fugacity (in Pa)."""
         fug = np.exp(beta * mu) / beta / 1e-30  # Pa
         return fug
@@ -311,17 +303,18 @@ class MPD:
     def tolerance(self, tolerance: float) -> None:
         self._tolerance = tolerance
 
+    @property
     def lnp(self) -> pd.DataFrame:
         """Return a dataframe with the natural logarithm of the macrostate probability."""
-        return self._lnp_df[["macrostate", "lnp"]]
+        return self._dataframe[["macrostate", "lnp"]]
 
     def check_tail(
         self, order: int, tolerance: float, lnp: Optional[pd.DataFrame] = None
     ) -> None:
         """Check the probability at the tail of the lnp distribution."""
         if lnp is None:
-            lnp = self.lnp()
-        mins = self.minimums(lnp=lnp, order=order)
+            lnp = self.lnp
+        mins = self.minimums(lnp=lnp["lnp"], order=order)
         if len(mins) == 0:
             difference = lnp["lnp"].max() - lnp["lnp"].iloc[-1]
         else:
@@ -339,7 +332,7 @@ class MPD:
 
     def reweight(self, delta_beta_mu: float) -> pd.DataFrame:
         """Reweight the MPD to a new mu / fugacity value using `delta_beta_mu`."""
-        lnp_rw = self._lnp_df.copy()
+        lnp_rw = self.lnp.copy()
         lnp_rw["lnp"] += delta_beta_mu * lnp_rw["macrostate"]
         lnp_rw["lnp"] = normalize(lnp_rw["lnp"])
         self.check_tail(lnp=lnp_rw, order=self.order, tolerance=self.tolerance)
@@ -362,20 +355,37 @@ class MPD:
         else:
             return lnp_rw
 
+    # TODO: optimize search method and test for edge cases
     def find_phase_equilibrium(
         self,
         tolerance: float = 1e-6,
         max_iterations: int = 100,
-        return_probabilites: bool = False,
+        return_probabilities: bool = False,
     ) -> Union[Tuple[float, float, float], float]:
-        """Find the fugacity at which the two phases are in equilibrium."""
+        """Find the fugacity at which the two phases are in equilibrium.
+
+        Arguments
+        ---------
+        tolerance
+            Tolerance for the root finding algorithm.
+        max_iterations
+            Maximum number of iterations for the root finding algorithm.
+        return_probabilities
+            Whether to return the probabilities of the two phases at equilibrium.
+
+        Returns
+        -------
+        float or Tuple[float, float, float]
+            The fugacity at which the two phases are in equilibrium. If `return_probabilities`
+            is True, also returns the probabilities of the two phases at equilibrium.
+        """
         from scipy.optimize import newton
         from scipy.special import logsumexp
 
         def objective(beta_mu) -> float:
             delta_beta_mu = beta_mu - self.beta_mu
             lnp = self.reweight(delta_beta_mu)
-            min_index = self.minimums(order=self._order, lnp=lnp)
+            min_index = self.minimums(order=self._order, lnp=lnp["lnp"])
             if len(min_index) == 0:
                 return float(lnp.lnp.values[0] - lnp.lnp.values[-1]) ** 2
             min_index = min_index[min_index.lnp == min_index.lnp.min()].index[0]
@@ -400,24 +410,43 @@ class MPD:
         equilibrium_p_low = float(np.exp(equilibrium_logsum_low))
         equilibrium_p_high = float(np.exp(equilibrium_logsum_high))
 
-        if return_probabilites:
+        if return_probabilities:
             return equilibrium_fugacity, equilibrium_p_low, equilibrium_p_high
         else:
             return equilibrium_fugacity
 
-    @staticmethod
-    def average_macrostate(lnp: pd.DataFrame) -> float:
+    def average_macrostate(
+        self, lnp: Optional[pd.DataFrame] = None, order: Optional[int] = None
+    ) -> Union[float, Tuple[float, float]]:
         """Calculate the average macrostate from the MPD data."""
-        return (np.exp(lnp["lnp"]) * lnp["macrostate"]).sum()
+        if lnp is None:
+            lnp = self.lnp
+        if order is None:
+            order = self.order
+        minimums = self.minimums(lnp=lnp["lnp"], order=order)
+        if len(minimums) == 0:
+            return (np.exp(lnp["lnp"]) * lnp["macrostate"]).sum()
+        else:
+            minn = minimums[minimums.lnp == minimums.lnp.min()].index[0]
+            print(minn)
+            lnp_a = lnp[:minn].copy()
+            lnp_b = lnp[minn + 1 :].copy()
 
-    def minimums(self, order: int, lnp: Optional[pd.DataFrame] = None) -> pd.DataFrame:
+            lnp_a["lnp"] = normalize(lnp_a["lnp"])
+            lnp_b["lnp"] = normalize(lnp_b["lnp"])
+
+            return (np.exp(lnp_a["lnp"]) * lnp_a["macrostate"]).sum(), (
+                np.exp(lnp_b["lnp"]) * lnp_b["macrostate"]
+            ).sum()
+
+    def minimums(self, order: int, lnp: Optional[pd.Series] = None) -> pd.DataFrame:
         """Find the local minimums in the lnp data."""
         if lnp is None:
-            lnp = self._lnp_df["lnp"]
+            lnp = self._dataframe["lnp"]
         min_loc = argrelextrema(lnp.values, np.less, order=order)[0]
         min_loc = min_loc[(10 < min_loc) & (min_loc < lnp.shape[0] - 10)]
 
-        return self._lnp_df.iloc[min_loc]
+        return self._dataframe.iloc[min_loc]
 
     def plot(
         self,
@@ -443,8 +472,8 @@ class MPD:
 
         fig.add_trace(
             go.Scatter(
-                x=self._lnp_df["macrostate"],
-                y=self._lnp_df["lnp"],
+                x=self.lnp["macrostate"],
+                y=self.lnp["lnp"],
                 mode="lines",
                 name=name,
             )
@@ -635,14 +664,14 @@ class MPD:
             Extrapolated MPD.
         """
         if energy is None:
-            if "term_1" in self._prob_df.columns:
-                energy = self._prob_df.copy()
+            if "term_1" in self._dataframe.columns:
+                energy = self._dataframe[["macrostate", "term_1"]].copy()
             else:
                 raise ValueError("Energy related data is missing.")
 
         beta = self.temperature_to_beta(temperature)
         delta_beta = beta - self.beta
-        lnp_extrapolated = self.lnp().copy()
+        lnp_extrapolated = self.lnp.copy()
         lnp_extrapolated["lnp"] += (
             self.mu * lnp_extrapolated["macrostate"] - energy["term_1"]
         ) * delta_beta

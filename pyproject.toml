@@ -108,3 +108,7 @@ docstring-code-line-length = "dynamic"
 [tool.docformatter]
 pre-summary-newline = true
 black = true
+
+[tool.ruff.per-file-ignores]
+"tests/**" = ["D"]
+"*_test.py" = ["D"]

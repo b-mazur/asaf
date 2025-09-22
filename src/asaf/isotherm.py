@@ -3,18 +3,15 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-import numpy as np
 import pandas as pd
 
 if TYPE_CHECKING:
-    from typing import Any, Dict, List, Optional, TypeVar, Union
+    from typing import Any, Dict, Optional, Union
 
     from numpy.typing import ArrayLike
     from plotly.graph_objects import Figure
 
-from utils import quote
-
-TNum = TypeVar("TNum", float, int, List[float], List[int], np.ndarray, pd.Series)
+from .utils import quote
 
 
 class Isotherm:
