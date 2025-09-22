@@ -1,28 +1,29 @@
+"""Module for handling Macrostate Probability Distribution (MPD) data."""
 from __future__ import annotations
 
-import pandas as pd
-import numpy as np
 import json
-from asaf.isotherm import Isotherm
-from scipy.signal import argrelextrema
-from asaf.constants import _BOLTZMANN_CONSTANT, _AVOGADRO_CONSTANT
-import plotly.graph_objects as go
-from typing import Any, List, Optional, Dict, TypeVar, Tuple, Union
 from math import factorial
+from typing import TYPE_CHECKING
 
+if TYPE_CHECKING:
+    from typing import Any, Dict, List, Optional, Tuple, TypeVar, Union
 
-def quote(string):
-    return f"'{string}'"
+    from numpy.typing import ArrayLike
 
+import numpy as np
+import pandas as pd
+import plotly.graph_objects as go
+from scipy.signal import argrelextrema
+
+from asaf.constants import _AVOGADRO_CONSTANT, _BOLTZMANN_CONSTANT
+from asaf.isotherm import Isotherm
 
 TNum = TypeVar("TNum", float, int, List[float], List[int], np.ndarray, pd.Series)
 
 
 # TODO: move static functions to utility module
 class MPD:
-    """
-    Class for storing and processing macrostate probability distribution.
-    """
+    """Class for storing and processing macrostate probability distribution."""
 
     def __init__(
         self,
@@ -34,8 +35,7 @@ class MPD:
         order: int = 50,
         tolerance: float = 10.0,
     ) -> None:
-        """
-        Initialize the MPD class.
+        """Initialize the MPD class.
 
         Parameters
         ----------
@@ -55,12 +55,7 @@ class MPD:
             how many points on each side use to find minimum in lnp
         tolerance
             used when checking the probability at lnp tail
-
-        Returns
-        -------
-        None
         """
-
         self.temperature = temperature
 
         if (beta_mu is None) and (fugacity is None):
@@ -72,8 +67,8 @@ class MPD:
             self._beta_mu = beta_mu
             self.mu = beta_mu / self.beta
 
-        lnp_headers = ['macrostate', 'lnp']
-        prob_headers = ['macrostate', 'P_up', 'P_down']
+        lnp_headers = ["macrostate", "lnp"]
+        prob_headers = ["macrostate", "P_up", "P_down"]
 
         have_lnp = set(lnp_headers).issubset(dataframe.columns)
         have_prob = set(prob_headers).issubset(dataframe.columns)
@@ -89,10 +84,12 @@ class MPD:
             self._lnp_df = self._dataframe[lnp_headers]
         else:
             lnp_df = self.calculate_lnp(dataframe[prob_headers])
-            merged = lnp_df.merge(dataframe, on='macrostate', how='left', suffixes=('', '_inp'))
+            merged = lnp_df.merge(
+                dataframe, on="macrostate", how="left", suffixes=("", "_inp")
+            )
             self._dataframe = merged
             self._lnp_df = self._dataframe[lnp_headers]
-            
+
         if have_prob:
             self._prob_df = self._dataframe[prob_headers]
 
@@ -111,14 +108,11 @@ class MPD:
 
     @classmethod
     def from_csv(cls, file_name: str, **kwargs: object) -> MPD:
-        """
-        Reads natural logarithm of macrostates probability or transition probabilities from a csv file.
-        """
-
+        """Read natural logarithm of macrostates probability or transition probabilities from a csv file."""
         df = pd.read_csv(file_name, **kwargs)
 
-        metadata_fname = file_name.removesuffix(".csv") + ".metadata.json"
-        with open(metadata_fname) as f:
+        metadata_filename = file_name.removesuffix(".csv") + ".metadata.json"
+        with open(metadata_filename) as f:
             metadata = json.load(f)
 
         temperature = metadata.get("temperature")
@@ -142,8 +136,7 @@ class MPD:
 
     @staticmethod
     def interpolate_df(df: pd.DataFrame, based_on: str = "macrostate") -> pd.DataFrame:
-        """
-        Interpolates data in a dataframe.
+        """Interpolates data in a dataframe.
 
         Parameters
         ----------
@@ -152,13 +145,13 @@ class MPD:
         based_on
             Column name in df containing values of the independent variable.
             Values must be real, finite, and in strictly increasing order.
+
         Returns
         -------
         df_interp
             A pandas DataFrame containing interpolated data.
 
         """
-
         columns = list(df)
         columns.remove(based_on)
         n_max = df[based_on].max()
@@ -171,17 +164,8 @@ class MPD:
         return df_interp
 
     @staticmethod
-    def normalize(lnp: pd.Series | np.ndarray) -> pd.Series | np.ndarray:
-        lnp_cp = lnp.copy()
-        maxx = np.max(lnp_cp)
-        lnp_cp -= np.log(sum(np.exp(lnp - maxx))) + maxx
-
-        return lnp_cp
-
-    @staticmethod
     def calculate_lnp(prob_df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Calculate the natural logarithm of the macrostate transition probability[1].
+        """Calculate the natural logarithm of the macrostate transition probability[1].
 
         Parameters
         ----------
@@ -210,33 +194,42 @@ class MPD:
         lnp_df = pd.DataFrame(
             data={
                 "macrostate": prob_df["macrostate"],
-                "lnp": MPD.normalize(dlnp.cumsum()),
+                "lnp": normalize(dlnp.cumsum()),
             }
         )
         return lnp_df
 
+    def dataframe(self) -> pd.DataFrame:
+        """Return dataframe."""
+        return self._dataframe
+
     @staticmethod
     def beta_to_temperature(beta: TNum) -> TNum:
+        """Convert beta to temperature using Boltzmann constant."""
         temp = 1 / _BOLTZMANN_CONSTANT / beta
         return temp
 
     @staticmethod
     def temperature_to_beta(temp: TNum) -> TNum:
+        """Convert temperature to beta using Boltzmann constant."""
         beta = 1 / _BOLTZMANN_CONSTANT / temp
         return beta
 
     @staticmethod
     def fugacity_to_mu(fugacity: TNum, beta: float) -> TNum:
+        """Convert fugacity (in Pa) to chemical potential (in J A^-3)."""
         mu = np.log(fugacity * 1e-30 * beta) / beta  # J A^-3
         return mu
 
     @staticmethod
     def mu_to_fugacity(mu: TNum, beta: float) -> TNum:
+        """Convert chemical potential (in J A^-3) to fugacity (in Pa)."""
         fug = np.exp(beta * mu) / beta / 1e-30  # Pa
         return fug
 
     @property
     def temperature(self) -> float:
+        """Return the temperature (in K)."""
         return self._temperature
 
     @temperature.setter
@@ -246,6 +239,7 @@ class MPD:
 
     @property
     def beta(self) -> float:
+        """Return the beta (in J^-1)."""
         return self._beta
 
     @beta.setter
@@ -255,6 +249,7 @@ class MPD:
 
     @property
     def fugacity(self) -> float:
+        """Return the fugacity (in Pa)."""
         return self._fugacity
 
     @fugacity.setter
@@ -264,6 +259,7 @@ class MPD:
 
     @property
     def mu(self) -> float:
+        """Return the chemical potential (in J A^-3)."""
         return self._mu
 
     @mu.setter
@@ -273,10 +269,12 @@ class MPD:
 
     @property
     def beta_mu(self) -> float:
+        """Return the beta_mu (unitless)."""
         return self._mu * self._beta
 
     @property
     def system_size(self) -> List[int]:
+        """Return the system size as a list of integers."""
         return self._system_size
 
     @system_size.setter
@@ -286,6 +284,7 @@ class MPD:
 
     @property
     def metadata(self) -> Dict[str, Any]:
+        """Return the metadata dictionary."""
         return self._metadata
 
     @metadata.setter
@@ -296,6 +295,7 @@ class MPD:
 
     @property
     def order(self) -> int:
+        """Return the order used to find minimum in lnp."""
         return self._order
 
     @order.setter
@@ -304,6 +304,7 @@ class MPD:
 
     @property
     def tolerance(self) -> float:
+        """Return the tolerance used when checking the probability at lnp tail."""
         return self._tolerance
 
     @tolerance.setter
@@ -311,9 +312,13 @@ class MPD:
         self._tolerance = tolerance
 
     def lnp(self) -> pd.DataFrame:
+        """Return a dataframe with the natural logarithm of the macrostate probability."""
         return self._lnp_df[["macrostate", "lnp"]]
 
-    def check_tail(self, order: int, tolerance: float, lnp: Optional[pd.DataFrame] = None) -> None:
+    def check_tail(
+        self, order: int, tolerance: float, lnp: Optional[pd.DataFrame] = None
+    ) -> None:
+        """Check the probability at the tail of the lnp distribution."""
         if lnp is None:
             lnp = self.lnp()
         mins = self.minimums(lnp=lnp, order=order)
@@ -326,16 +331,17 @@ class MPD:
 
         if difference < tolerance:
             print(
-                f"WARNING! lnPi at N_max has a relative value higher ({difference}) than tolerance ({tolerance})."
+                f"WARNING! lnPi at N_max has a relative value higher ({difference:.1f}) than tolerance ({tolerance:.1f})."
             )
             print(
                 "The results may be erroneous. Provide data for higher macrostate values."
             )
 
     def reweight(self, delta_beta_mu: float) -> pd.DataFrame:
+        """Reweight the MPD to a new mu / fugacity value using `delta_beta_mu`."""
         lnp_rw = self._lnp_df.copy()
         lnp_rw["lnp"] += delta_beta_mu * lnp_rw["macrostate"]
-        lnp_rw["lnp"] = self.normalize(lnp_rw["lnp"])
+        lnp_rw["lnp"] = normalize(lnp_rw["lnp"])
         self.check_tail(lnp=lnp_rw, order=self.order, tolerance=self.tolerance)
 
         return lnp_rw
@@ -343,13 +349,14 @@ class MPD:
     def reweight_to_fug(
         self, fugacity: float, inplace: bool = True
     ) -> None | pd.DataFrame:
+        """Reweight the MPD to a new mu / fugacity value using desired fugacity."""
         beta_0 = self.beta
         mu_0 = self.mu
         mu = self.fugacity_to_mu(fugacity, beta_0)
         delta_beta_mu = beta_0 * (mu - mu_0)
         lnp_rw = self.reweight(delta_beta_mu)
         if inplace:
-            self._lnp_df = lnp_rw
+            self._dataframe["lnp"] = lnp_rw["lnp"]
             self.fugacity = fugacity
             return None
         else:
@@ -361,8 +368,9 @@ class MPD:
         max_iterations: int = 100,
         return_probabilites: bool = False,
     ) -> Union[Tuple[float, float, float], float]:
-        from scipy.special import logsumexp
+        """Find the fugacity at which the two phases are in equilibrium."""
         from scipy.optimize import newton
+        from scipy.special import logsumexp
 
         def objective(beta_mu) -> float:
             delta_beta_mu = beta_mu - self.beta_mu
@@ -399,9 +407,11 @@ class MPD:
 
     @staticmethod
     def average_macrostate(lnp: pd.DataFrame) -> float:
+        """Calculate the average macrostate from the MPD data."""
         return (np.exp(lnp["lnp"]) * lnp["macrostate"]).sum()
 
     def minimums(self, order: int, lnp: Optional[pd.DataFrame] = None) -> pd.DataFrame:
+        """Find the local minimums in the lnp data."""
         if lnp is None:
             lnp = self._lnp_df["lnp"]
         min_loc = argrelextrema(lnp.values, np.less, order=order)[0]
@@ -415,6 +425,7 @@ class MPD:
         name: Optional[str] = None,
         show: bool = True,
     ) -> None:
+        """Plot the MPD data using plotly."""
         font = {"family": "Helvetica Neue", "size": 14, "color": "black"}
 
         axes = {
@@ -457,7 +468,8 @@ class MPD:
         if show:
             fig.show()
 
-    def free_energy_at_fug(self, fug: float) -> pd.DataFrame:
+    def free_energy_at_fugacity(self, fug: float) -> pd.DataFrame:
+        """Calculate the free energy profile at a given fugacity."""
         beta_0 = self._beta
         mu_0 = self._mu
         mu = self.fugacity_to_mu(fug, beta_0)
@@ -477,9 +489,10 @@ class MPD:
 
         return free_energy
 
-    def average_macrostate_at_fug(
+    def average_macrostate_at_fugacity(
         self, fug: float, order: Optional[int] = None
     ) -> List[float]:
+        """Calculate the average macrostate at a given fugacity."""
         beta_0 = self._beta
         mu_0 = self._mu
         mu = self.fugacity_to_mu(fug, beta_0)
@@ -487,7 +500,7 @@ class MPD:
         lnp_rw = self.reweight(delta_beta_mu)
         if order is None:
             order = self.order
-        mins = self.minimums(lnp=lnp_rw['lnp'], order=order)
+        mins = self.minimums(lnp=lnp_rw["lnp"], order=order)
 
         if len(mins) == 0:
             return [self.average_macrostate(lnp_rw) / self._system_size_prod]
@@ -499,8 +512,8 @@ class MPD:
             p_a = np.exp(lnp_a["lnp"]).sum()
             p_b = np.exp(lnp_b["lnp"]).sum()
 
-            lnp_a["lnp"] = self.normalize(lnp_a["lnp"])
-            lnp_b["lnp"] = self.normalize(lnp_b["lnp"])
+            lnp_a["lnp"] = normalize(lnp_a["lnp"])
+            lnp_b["lnp"] = normalize(lnp_b["lnp"])
 
             if p_a > p_b:
                 return [
@@ -515,24 +528,22 @@ class MPD:
 
     def calculate_isotherm(
         self,
-        pressures: np.ndarray | List[float],
-        fugacity_coefficient: float = 1.0,
-        bulk_mpd: Optional[MPD] = None,
-        saturation_pressure: Optional[float] = None,
+        fugacity: ArrayLike,
+        saturation_fugacity: Optional[float] = None,
+        pressure: Optional[ArrayLike] = None,
         order: Optional[int] = None,
         return_dataframe: bool = True,
-    ) -> pd.DataFrame | Isotherm:
-        """
-        Calculates the adsorption isotherm.
+    ) -> Union[pd.DataFrame | Isotherm]:
+        """Calculate the adsorption isotherm.
 
         Parameters
         ----------
-        pressures
-            Array of pressures.
-        fugacity_coefficient
-            Fugacity coefficient to calculate the fugacity.
-        saturation_pressure
+        fugacity
+            Array of fugacities.
+        saturation_fugacity
             Saturation pressure to calculate the pressure in relative scale (p/p0).
+        pressure
+            Array of pressures corresponding to the fugacities.
         order
             How many points on each side use to find minimum in lnp.
         return_dataframe
@@ -542,10 +553,11 @@ class MPD:
         -------
         pd.DataFrame or Isotherm
             DataFrame containing the adsorption isotherm or Isotherm instance if return_dataframe is False.
+
+        Args:
+            pressure:
         """
-
-        fugs = Isotherm.calculate_fugacity(pressures, fugacity_coefficient)
-
+        from asaf import Isotherm
         stable_phase = []
         metastable_gas = []
         metastable_liq = []
@@ -553,8 +565,8 @@ class MPD:
         if order is None:
             order = self.order
 
-        for fug in fugs:
-            uptake = self.average_macrostate_at_fug(fug, order=order)
+        for fug in fugacity:
+            uptake = self.average_macrostate_at_fugacity(fug, order=order)
             if len(uptake) > 1:
                 if uptake[0] > uptake[1]:
                     stable_phase.append([fug, uptake[0]])
@@ -585,22 +597,18 @@ class MPD:
                 isotherm, iso_metastable_liq, on="fugacity", how="outer"
             )
 
-        isotherm.insert(
-            0,
-            "pressure",
-            Isotherm.calculate_pressure(isotherm["fugacity"], fugacity_coefficient),
-        )
+        if saturation_fugacity is not None:
+            isotherm.insert(1, "f/f0", isotherm["fugacity"] / saturation_fugacity)
 
-        if saturation_pressure:
-            isotherm.insert(1, "p/p0", isotherm["pressure"] / saturation_pressure)
+        if pressure is not None:
+            isotherm.insert(1, "pressure", np.array(pressure))
 
-        if return_dataframe is True:
+        if return_dataframe:
             return isotherm
         else:
             return Isotherm(
                 data=isotherm,
-                saturation_pressure=saturation_pressure,
-                fugacity_coefficient=fugacity_coefficient,
+                saturation_fugacity=saturation_fugacity,
                 metadata=self.metadata,
             )
 
@@ -610,8 +618,7 @@ class MPD:
         energy: Optional[pd.DataFrame | pd.Series] = None,
         terms: int = 1,
     ) -> "MPD":
-        """
-        Extrapolates the MPD to a new temperature.
+        """Extrapolates the MPD to a new temperature.
 
         Parameters
         ----------
@@ -627,9 +634,8 @@ class MPD:
         MPD
             Extrapolated MPD.
         """
-
         if energy is None:
-            if "term_1" in self._prob_df:
+            if "term_1" in self._prob_df.columns:
                 energy = self._prob_df.copy()
             else:
                 raise ValueError("Energy related data is missing.")
@@ -640,13 +646,13 @@ class MPD:
         lnp_extrapolated["lnp"] += (
             self.mu * lnp_extrapolated["macrostate"] - energy["term_1"]
         ) * delta_beta
-        lnp_extrapolated["lnp"] = self.normalize(lnp_extrapolated["lnp"])
+        lnp_extrapolated["lnp"] = normalize(lnp_extrapolated["lnp"])
 
         for i in range(2, terms + 1):
             lnp_extrapolated["lnp"] += (
                 1 / factorial(i) * energy[f"term_{i}"] * np.power(delta_beta, i)
             )
-            lnp_extrapolated["lnp"] = self.normalize(lnp_extrapolated["lnp"])
+            lnp_extrapolated["lnp"] = normalize(lnp_extrapolated["lnp"])
 
         return MPD(
             dataframe=lnp_extrapolated,
@@ -654,3 +660,23 @@ class MPD:
             fugacity=self.mu_to_fugacity(self.mu, beta),
             metadata=self.metadata,
         )
+
+
+def normalize(lnp: Union[pd.Series, np.ndarray]) -> Union[pd.Series, np.ndarray]:
+    """
+    Normalize the natural logarithm of the macrostate probability.
+
+    Parameters
+    ----------
+    lnp
+        Natural logarithm of the macrostate probability.
+
+    Returns
+    -------
+    Normalized natural logarithm of the macrostate probability.
+    """
+    lnp_cp = lnp.copy()
+    maxx = np.max(lnp_cp)
+    lnp_cp -= np.log(sum(np.exp(lnp - maxx))) + maxx
+
+    return lnp_cp

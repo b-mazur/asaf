@@ -1,64 +1,56 @@
+"""Provides the Isotherm class to store, manipulate, plot and save adsorption isotherm data."""
 from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
-from gemmi import cif
-import plotly.graph_objects as go
-import plotly.colors as pc
-from typing import Any, List, Optional, Dict, TypeVar
 
+if TYPE_CHECKING:
+    from typing import Any, Dict, List, Optional, TypeVar, Union
 
-def quote(string):
-    return f"'{string}'"
+    from numpy.typing import ArrayLike
+    from plotly.graph_objects import Figure
 
+from utils import quote
 
 TNum = TypeVar("TNum", float, int, List[float], List[int], np.ndarray, pd.Series)
 
 
 class Isotherm:
-    """
-    Isotherm class to store, recalculate and save the adsorption isotherm.
-    """
+    """Isotherm class to store, recalculate and save the adsorption isotherm."""
 
     def __init__(
         self,
         data: pd.DataFrame = None,
-        saturation_pressure: Optional[float] = None,
-        fugacity_coefficient: float = 1.0,
+        saturation_fugacity: Optional[float] = None,
         metadata: Optional[dict[str, Any]] = None,
-        pressure_unit: str = "Pa",
+        fugacity_unit: str = "Pa",
         uptake_unit: str = "molecules/unitcell",
     ) -> None:
-        """
-        Initialize the Isotherm object.
+        """Initialize the Isotherm object.
 
         Parameters
         ----------
         data
             A pandas DataFrame containing the adsorption data. Should contain 'pressure' and 'uptake' columns.
-        saturation_pressure
+        saturation_fugacity
             The saturation pressure at given conditions. Used to calculate the relative pressure.
-        fugacity_coefficient
-            The fugacity coefficient at given conditions. Used to convert between pressure and fugacity.
         metadata
             A dictionary with the simulation metadata.
         uptake_unit
             Units at which uptake is stored. Default value is 'molecules/unitcell'.
-
-        Returns
-        -------
-        None
         """
         self.dataframe = data
-        self.fugacity_coefficient = fugacity_coefficient
-        self.saturation_pressure = saturation_pressure
+        self.saturation_fugacity = saturation_fugacity
         self._metadata = {}
         self.metadata = metadata
-        self._pressure_unit = pressure_unit
+        self._pressure_unit = fugacity_unit
         self._uptake_unit = uptake_unit
 
     @property
     def dataframe(self) -> pd.DataFrame:
+        """Return dataframe with isotherm data."""
         return self._dataframe
 
     @dataframe.setter
@@ -66,53 +58,44 @@ class Isotherm:
         self._dataframe = dataframe
 
     @property
-    def pressure(self) -> pd.Series:
-        return self._dataframe["pressure"]
+    def pressure(self) -> Union[pd.Series, None]:
+        """Return the pressure column."""
+        if "pressure" in self._dataframe.columns:
+            return self._dataframe["pressure"]
+        else:
+            return None
 
     @pressure.setter
-    def pressure(self, pressure: pd.Series | List[float] | np.ndarray) -> None:
+    def pressure(self, pressure: ArrayLike) -> None:
         self._dataframe["pressure"] = pressure
-        self._dataframe["fugacity"] = self.calculate_fugacity(
-            pressure, self.fugacity_coefficient
-        )
 
     @property
-    def fugacity(self) -> pd.Series:
-        return self._dataframe["fugacity"]
+    def fugacity(self) -> Union[pd.Series, None]:
+        """Return the fugacity column."""
+        if "fugacity" in self._dataframe.columns:
+            return self._dataframe["fugacity"]
+        else:
+            return None
 
     @property
-    def fugacity_coefficient(self) -> float:
-        return self._fugacity_coefficient
+    def saturation_fugacity(self) -> float:
+        """Return the saturation fugacity."""
+        return self._saturation_fugacity
 
-    @fugacity_coefficient.setter
-    def fugacity_coefficient(self, fugacity_coefficient: float) -> None:
-        self._fugacity_coefficient = fugacity_coefficient
-        self.pressure = self.pressure
-
-    @property
-    def saturation_pressure(self) -> float:
-        return self._saturation_pressure
-
-    @saturation_pressure.setter
-    def saturation_pressure(self, saturation_pressure: float | None) -> None:
-        self._saturation_pressure = saturation_pressure
-        if saturation_pressure is not None:
-            self._dataframe["p/p0"] = self.pressure / saturation_pressure
-
-    @staticmethod
-    def calculate_fugacity(pressure: TNum, fugacity_coefficient: float) -> TNum:
-        return pressure * fugacity_coefficient
-
-    @staticmethod
-    def calculate_pressure(fugacity: TNum, fugacity_coefficient: float) -> TNum:
-        return fugacity / fugacity_coefficient
+    @saturation_fugacity.setter
+    def saturation_fugacity(self, saturation_fugacity: float | None) -> None:
+        self._saturation_fugacity = saturation_fugacity
+        if saturation_fugacity is not None:
+            self._dataframe["f/f0"] = self.fugacity / saturation_fugacity
 
     @property
     def amount_adsorbed(self) -> pd.Series:
+        """Return the uptake column."""
         return self.dataframe["uptake"]
 
     @property
     def metastable_gas(self) -> Optional[pd.Series]:
+        """Return the metastable gas column, if it exists."""
         if "metastable_gas" in self._dataframe.columns:
             return self._dataframe["metastable_gas"]
         else:
@@ -120,6 +103,7 @@ class Isotherm:
 
     @property
     def metastable_liq(self) -> Optional[pd.Series]:
+        """Return the metastable liquid column, if it exists."""
         if "metastable_liq" in self._dataframe.columns:
             return self._dataframe["metastable_liq"]
         else:
@@ -127,19 +111,23 @@ class Isotherm:
 
     @property
     def pressure_unit(self) -> str:
+        """Return the current pressure unit."""
         return self._pressure_unit
 
     def set_pressure_unit(self, target_unit: str, conversion_factor: float) -> None:
+        """Convert the pressure column to the target unit using the provided conversion factor."""
         self.pressure = self.pressure * conversion_factor
         self._pressure_unit = target_unit
 
     @property
     def uptake_unit(self) -> str:
+        """Return the current uptake unit."""
         return self._uptake_unit
 
     def set_uptake_unit(
         self, target_unit: str, conversion_factor: Optional[float] = None
     ) -> None:
+        """Convert the uptake column to the target unit."""
         def get_conversion_factor(current_unit: str, new_unit: str) -> float:
             """Retrieve or compute the conversion factor between units.
 
@@ -177,6 +165,7 @@ class Isotherm:
 
     @property
     def metadata(self) -> Dict[str, Any]:
+        """Return the metadata dictionary."""
         return self._metadata
 
     @metadata.setter
@@ -185,149 +174,27 @@ class Isotherm:
             for k, v in metadata.items():
                 self._metadata[k] = v
 
-    # def plot(
-    #     self,
-    #     label: Optional[str] = None,
-    #     fig: Optional[go.Figure] = None,
-    #     x_axis: str = "pressure",
-    #     y_axis: str = "molecules/unitcell",
-    #     trace_kwargs: Optional[Dict[str, Any]] = None,
-    #     layout_kwargs: Optional[Dict[str, Any]] = None,
-    # ) -> go.Figure:
-    #     """
-    #     Plot an isotherm (stable + metastable gas + metastable liquid) and group all traces
-    #     under a single legend entry.
-    #     """
-    #
-    #     # trace_kwargs = trace_kwargs or {}
-    #     # layout_kwargs = layout_kwargs or {}
-    #
-    #     if not color:
-    #         default_colors = pc.qualitative.Plotly
-    #         calls = getattr(fig, "_plot_calls", 0)
-    #         color = default_colors[calls % len(default_colors)]
-    #         fig._plot_calls = calls + 1
-    #
-    #     if not marker:
-    #         marker = 'circle'
-    #
-    #     font = dict(family="Helvetica Neue", size=14, color="black")
-    #     axes_common = dict(
-    #         showline=True,
-    #         linewidth=1,
-    #         linecolor="black",
-    #         gridcolor="lightgrey",
-    #         mirror=True,
-    #         zeroline=False,
-    #         ticks="inside",
-    #     )
-    #
-    #     # get or create figure
-    #     show_immediately = False
-    #     if fig is None:
-    #         fig = go.Figure()
-    #         show_immediately = True
-    #
-    #     # # cycle through Plotly qualitative palette
-    #     # calls = getattr(fig, "_plot_calls", 0)
-    #     # color = default_colors[calls % len(default_colors)]
-    #     # fig._plot_calls = calls + 1
-    #
-    #     # --- choose x data & title ---
-    #     axis_map = {
-    #         "pressure": (self.pressure, f"Pressure ({self.pressure_unit})"),
-    #         "fugacity": (self.fugacity, f"Fugacity ({self.pressure_unit})"),
-    #         "relative_pressure": (self._dataframe["p/p0"], "p/p₀"),
-    #         "p/p0": (self._dataframe["p/p0"], "p/p₀"),
-    #     }
-    #     try:
-    #         x_vals, x_title = axis_map[x_axis]
-    #     except KeyError:
-    #         valid = "', '".join(axis_map)
-    #         raise ValueError(f"x_axis must be one of '{valid}'. Got {x_axis!r}.")
-    #
-    #     original_unit = self.uptake_unit
-    #     if y_axis != original_unit:
-    #         self.set_uptake_unit(y_axis)
-    #
-    #     legend_name = label or "Uptake"
-    #
-    #     lg = dict(legendgroup=legend_name)
-    #     fig.add_trace(
-    #         go.Scatter(
-    #             x=x_vals,
-    #             y=self.amount_adsorbed,
-    #             mode="lines+markers",
-    #             name=legend_name,
-    #             line=dict(color=color),
-    #             marker=dict(color=color, symbol=marker),
-    #             **lg,
-    #             **kwargs
-    #         )
-    #     )
-    #     if self.metastable_gas is not None:
-    #         fig.add_trace(
-    #             go.Scatter(
-    #                 x=x_vals,
-    #                 y=self.metastable_gas,
-    #                 mode="lines",
-    #                 name=legend_name,
-    #                 line=dict(color=color, dash="dash"),
-    #                 showlegend=False,
-    #                 **lg,
-    #                 **kwargs
-    #             )
-    #         )
-    #     if self.metastable_liq is not None:
-    #         fig.add_trace(
-    #             go.Scatter(
-    #                 x=x_vals,
-    #                 y=self.metastable_liq,
-    #                 mode="lines",
-    #                 name=legend_name,
-    #                 line=dict(color=color, dash="dash"),
-    #                 showlegend=False,
-    #                 **lg,
-    #                 **kwargs
-    #             )
-    #         )
-    #
-    #     # restore original unit
-    #     if y_axis != original_unit:
-    #         self.set_uptake_unit(original_unit)
-    #
-    #     fig.update_layout(
-    #         font=font,
-    #         xaxis=axes_common,
-    #         xaxis_title=x_title,
-    #         yaxis=axes_common,
-    #         yaxis_title=f"Uptake ({y_axis})",
-    #         plot_bgcolor="white",
-    #         width=700,
-    #         height=500,
-    #         margin=dict(l=30, r=30, t=30, b=30),
-    #         legend=dict(traceorder="grouped"),
-    #     )
-    #
-    #     if show_immediately:
-    #         fig.show()
-    #
-    #     return fig
-
     def plot(
         self,
         label: Optional[str] = None,
-        fig: Optional[go.Figure] = None,
-        x_axis: str = "pressure",
+        fig: Optional[Figure] = None,
+        x_axis: str = "fugacity",
         y_axis: str = "molecules/unitcell",
         trace_kwargs: Optional[Dict[str, Any]] = None,
         layout_kwargs: Optional[Dict[str, Any]] = None,
-    ) -> go.Figure:
+    ) -> Figure:
+        """Plot an isotherm (stable + metastable gas and / or liquid) and group all traces under a single legend entry.
+
+        You can pass any kwargs through `trace_kwargs` or `layout_kwargs`; missing values will be filled in by defaults.
         """
-        Plot an isotherm (stable + metastable gas + metastable liquid) and group
-        all traces under a single legend entry. You can pass any kwargs through
-        `trace_kwargs` or `layout_kwargs`; missing values will be filled in by defaults.
-        """
+        import plotly.colors as pc
+        import plotly.graph_objects as go
+        
+        # get or create figure
+        show_immediately = False
+        if fig is None:
+            fig = go.Figure()
+            show_immediately = True
 
         trace_kwargs = trace_kwargs or {}
         layout_kwargs = layout_kwargs or {}
@@ -336,8 +203,6 @@ class Isotherm:
         explicit_color = None
         if "line" in trace_kwargs and isinstance(trace_kwargs["line"], dict):
             explicit_color = trace_kwargs["line"].get("color")
-        # if "marker" in trace_kwargs and isinstance(trace_kwargs["marker"], dict):
-        #     explicit_color = explicit_color or trace_kwargs["marker"].get("color")
 
         if explicit_color:
             color = explicit_color
@@ -352,6 +217,8 @@ class Isotherm:
             "fugacity": (self.fugacity, f"Fugacity ({self.pressure_unit})"),
             "relative_pressure": (self._dataframe["p/p0"], "p/p₀"),
             "p/p0": (self._dataframe["p/p0"], "p/p₀"),
+            "relative_fugacity": (self._dataframe["f/f0"], "f/f₀"),
+            "f/f0": (self._dataframe["f/f0"], "f/f₀"),
         }
 
         if x_axis not in axis_map:
@@ -392,12 +259,6 @@ class Isotherm:
             "line": stable_line,
             "marker": stable_marker,
         }
-        
-        # get or create figure
-        show_immediately = False
-        if fig is None:
-            fig = go.Figure()
-            show_immediately = True
 
         fig.add_trace(go.Scatter(**merged_stable))
 
@@ -465,8 +326,7 @@ class Isotherm:
     def to_aif(
         self, filename: str, user_key_mapper: Optional[Dict[str, Any]] = None
     ) -> None:
-        """
-        Saves the isotherm in an AIF file format.
+        """Save the isotherm in an AIF file format.
 
         Parameters
         ----------
@@ -480,7 +340,8 @@ class Isotherm:
         -------
         None
         """
-
+        from gemmi import cif
+        
         metadata = self.metadata
         key_mapper = {
             "_exptl_temperature": "temperature",
@@ -516,8 +377,8 @@ class Isotherm:
 
         df = self.dataframe
 
-        if self.saturation_pressure:
-            df["saturation_pressure"] = self.saturation_pressure
+        if self.saturation_fugacity:
+            df["saturation_pressure"] = self.saturation_fugacity
             loop_ads = block.init_loop(
                 "_adsorp_", ["pressure", "p0", "fugacity", "amount"]
             )
@@ -544,4 +405,5 @@ class Isotherm:
         doc.write_file(f"{filename}.aif")
 
     def to_csv(self, filename: str) -> None:
+        """Save the isotherm data to a CSV file."""
         self.dataframe.to_csv(filename)

@@ -21,17 +21,6 @@ dependencies = [
     "plotly",
 ]
 
-[project.optional-dependencies]
-#dev = ["pytest>=7.4.0", "pytest-cov>=3.0.0", "ruff>=0.0.285"]
-docs = [
-    "mkdocs-material>=9.4.0",
-    "mkdocstrings[python]>=0.22.0",
-    "mkdocs-gen-files>=0.5.0",
-    "mkdocs-literate-nav>=0.6.0",
-    "pillow>=10.0.0",
-    "cairosvg>=2.7.1"
-]
-
 [tool.setuptools.package-dir]
 "" = "src"
 
@@ -41,7 +30,8 @@ include = [
     "asaf",
     "asaf.mpd",
     "asaf.constants",
-    "asaf.isotherm"
+    "asaf.isotherm",
+    "asaf.utils",
 ]
 
 [dependency-groups]
@@ -50,3 +40,71 @@ lint = [
     "pandas-stubs",
     "scipy-stubs"
 ]
+docs = [
+    "mkdocs-material>=9.4.0",
+    "mkdocstrings[python]>=0.22.0",
+    "mkdocs-gen-files>=0.5.0",
+    "mkdocs-literate-nav>=0.6.0",
+    "pillow>=10.0.0",
+    "cairosvg>=2.7.1"
+]
+dev = ["pytest", "pytest-cov"]
+
+[tool.uv]
+default-groups = ["lint", "docs", "dev"]
+
+[tool.ruff]
+exclude = [
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".git-rewrite",
+    ".hg",
+    ".ipynb_checkpoints",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".pyenv",
+    ".pytest_cache",
+    ".pytype",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    ".vscode",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "site-packages",
+    "venv",
+]
+
+# Same as Black.
+line-length = 88
+indent-width = 4
+
+# Assume Python 3.11
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["D"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+docstring-code-format = true
+docstring-code-line-length = "dynamic"
+
+[tool.docformatter]
+pre-summary-newline = true
+black = true

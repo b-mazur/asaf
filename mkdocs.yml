@@ -1,0 +1,53 @@
+# yaml-language-server: $schema=https://squidfunk.github.io/mkdocs-material/schema.json
+repo_url: https://github.com/b-mazur/asaf
+site_author: Bartosz Mazur
+site_description: >-
+  ASAF (Adsorption Simulation Analysis Facilitator) is a python library created to facilitate the processing 
+  and analysis of data from grand canonical transition matrix Monte Carlo adsorption simulations.
+site_name: asaf
+site_url: https://b-mazur.github.io/asaf/
+nav:
+  - Home: index.md
+  - Installation guide: installation.md
+
+theme:
+  features:
+    - content.action.edit
+    - content.code.copy
+    - content.code.select
+    - content.code.annotate
+    - content.tabs.link
+    - content.tooltips
+    - navigation.footer
+    - navigation.path
+    - navigation.tracking
+    - navigation.sections
+    - navigation.top
+    - search.highlight
+    - search.suggest
+    - search.share
+    - header.autohide
+    - toc.follow
+  name: material
+  palette:
+    primary: blue grey
+    scheme: slate
+
+plugins:
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          inventories:
+            - https://docs.python.org/3/objects.inv
+            - https://numpy.org/doc/stable/objects.inv
+          options:
+            docstring_style: numpy
+            docstring_section_style: list
+            separate_signature: true
+            merge_init_into_class: true
+            docstring_options:
+              ignore_init_summary: true
+            show_signature_annotations: true
+            signature_crossrefs: true
+            show_if_no_docstring: true
