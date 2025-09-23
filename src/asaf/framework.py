@@ -1,3 +1,5 @@
+"""Framework class for handling molecular periodic structures and generating simulation files."""
+
 from __future__ import annotations
 
 import json
@@ -22,7 +24,9 @@ logger = logging.getLogger(__name__)
 
 
 class Framework(object):
-    """Represents a molecular periodic structure. The basic components are the sequence of sites and the crystal lattice
+    """Represents a molecular periodic structure.
+
+    The basic components are the sequence of sites and the crystal lattice
     parameters. Additionally, it may store framework-specific and site-specific properties.
     """
 
@@ -35,16 +39,19 @@ class Framework(object):
         site_types: Optional[List[str]] = None,
         charges: Optional[List[float]] = None,
     ):
-        """Initializes the Framework object from lattice parameters, site labels, and coordinates.
+        """Initialize the Framework object from lattice parameters, site labels, and coordinates.
 
         Args:
-            lattice (list): Lattice parameters as a list of six floats representing the lengths (a, b, c) and
+            lattice : list
+                Lattice parameters as a list of six floats representing the lengths (a, b, c) and
                 angles (alpha, beta, gamma) of the unit cell or as a 3x3 matrix. If matrix is provided,
                 `lattice_as_matrix` should be set to True
-            sites (list): List of site labels or indices corresponding to the atomic numbers of the sites
-            coordinates (array-like): 2D array of shape (n_sites, 3) containing the fractional coordinates
-                of the sites in the unit cell
-            lattice_as_matrix (bool): If True, `lattice` is treated as a 3x3 matrix representing the unit cell vectors.
+            sites : list
+                Site labels or indices corresponding to the atomic numbers of the sites
+            coordinates : array-like
+                2D array of shape (n_sites, 3) containing the fractional coordinates of the sites in the unit cell
+            lattice_as_matrix : bool
+                If True, `lattice` is treated as a 3x3 matrix representing the unit cell vectors.
                 If False, it is treated as a list of six floats representing the lattice parameters
                 (a, b, c, alpha, beta, gamma).
         """
@@ -88,8 +95,9 @@ class Framework(object):
 
     @staticmethod
     def lattice_parameters_to_matrix(a, b, c, alpha, beta, gamma):
-        """Converts lattice parameters to a 3x3 matrix representation of the unit cell.
-        source: http://dx.doi.org/10.1080/08927022.2013.819102
+        """Convert lattice parameters to a 3x3 matrix representation of the unit cell.
+
+        source: https://dx.doi.org/10.1080/08927022.2013.819102
 
             ( a   b cos(gamma)   c cos(beta)               )
         h = ( 0   b sin(gamma)   c z                       )
@@ -103,7 +111,8 @@ class Framework(object):
             a, b, c (float): lengths of the unit cell edges
             alpha, beta, gamma (float): angles between the edges in degrees
 
-        Returns:
+        Returns
+        -------
             np.ndarray: 3x3 matrix representing the unit cell vectors, each row is a vector
         """
         alpha, beta, gamma = np.radians(alpha), np.radians(beta), np.radians(gamma)
@@ -124,7 +133,8 @@ class Framework(object):
             fractional_coords: Nx3 array of fractional coordinates
             lattice: Optional 3x3 lattice matrix. If None, uses self._lattice
 
-        Returns:
+        Returns
+        -------
             Nx3 array of cartesian coordinates
         """
         if lattice is None:
@@ -139,8 +149,7 @@ class Framework(object):
         remove_site_labels: bool = False,
         partial_charge_header: str = "_atom_site_charge",
     ) -> Framework:
-        """Read the CIF file and populate self._dataframe.
-        """
+        """Read the CIF file and populate self._dataframe."""
         logger.info("Reading CIF file: %s", cif_file)
         try:
             cif_data = cif.read(str(cif_file))
@@ -190,7 +199,8 @@ class Framework(object):
         )
 
     def calculate_framework_mass(self):
-        """Calculates the molar mass of the framework.
+        """Calculate the molar mass of the framework.
+
         Units: g / mol / unit cell
         """
         if self._framework_mol_mass is None:
@@ -202,7 +212,7 @@ class Framework(object):
         return self._framework_mol_mass
 
     def calculate_conversion_factors(self):
-        """Calculates the conversion factors for the isotherm recalculation."""
+        """Calculate the conversion factors for the isotherm recalculation."""
         mass = self.calculate_framework_mass()
         # molecules / unit cell -> mol / kg
         self._molecules_uc__mol_kg = 1000 / mass
@@ -212,26 +222,33 @@ class Framework(object):
         )
 
     def site_labels(self, as_list: bool = False) -> List[str] | pd.Series:
+        """Return the site labels as a list or pandas Series."""
         if as_list:
             return self._dataframe["site_label"].to_list()
         else:
             return self._dataframe["site_label"]
 
     def site_types(self, as_list: bool = False) -> List[str] | pd.Series:
+        """Return the site types as a list or pandas Series."""
         if as_list:
             return self._dataframe["site_type"].to_list()
         else:
             return self._dataframe["site_type"]
 
     def check_net_charge(self, unit_cells: tuple[int, int, int]) -> float:
-        """Returns the total net charge of the replicated system (all UC).
+        """Return the total net charge of the replicated system (all UC).
+
         Prints a warning if |net_charge| > 1e-5 e.
 
-        Args:
-            unit_cells: how many times to replicate in (x, y, z).
+        Arguments
+        ---------
+        unit_cells : tuple
+            how many times to replicate in (x, y, z).
 
-        Returns:
-            float: net charge in the full system (units of e).
+        Returns
+        -------
+        float
+            net charge in the full system (units of e).
         """
         total_uc_charge = self._dataframe["site_charge"].sum()
         system_charge = total_uc_charge * int(np.prod(unit_cells))
@@ -243,7 +260,9 @@ class Framework(object):
         return system_charge
 
     def reduce_net_charge(self):
-        """Remove any net charge by proportionally subtracting from each site:
+        """Remove any net charge by proportionally subtracting from each site.
+
+        The adjustment is done as follows:
         q_i_new = q_i_old - (sum_j q_j) * (|q_i_old| / sum_k |q_k_old|)
 
         After this, the total charge across all sites is zero.
@@ -271,7 +290,9 @@ class Framework(object):
 
     @staticmethod
     def _reduce_tilt_factors(box: tuple[float, ...]) -> tuple[float, ...]:
-        """Reduce triclinic tilt factors to LAMMPS/FEASST canonical range:
+        """Reduce triclinic tilt factors to LAMMPS/FEASST canonical range.
+
+        LAMMPS requires tilt factors to be within specific ranges relative to box lengths:
           xy,xz ∈ (-lx/2, lx/2],  yz ∈ (-ly/2, ly/2]
         https://docs.lammps.org/Howto_triclinic.html#periodicity-and-tilt-factors-for-triclinic-simulation-boxes
         """
@@ -327,7 +348,8 @@ class Framework(object):
             unit_cells: Tuple of (nx, ny, nz) repetitions along each axis
             center: Whether to center the coordinates around origin
 
-        Returns:
+        Returns
+        -------
             tuple: (
                 DataFrame with site_label and cartesian coordinates,
                 box dimensions,
@@ -406,8 +428,7 @@ class Framework(object):
         return system, box, vectors
 
     def create_system(self, unit_cells=(1, 1, 1)):
-        """Create a supercell system (wrapper around create_supercell for backward compatibility).
-        """
+        """Create a supercell system (wrapper around create_supercell for backward compatibility)."""
         return self.create_supercell(unit_cells)
 
     def write_metadata(self, metadata_file_name, box, unit_cells, cutoff, cell_vectors):
@@ -437,13 +458,18 @@ class Framework(object):
         parameters: Dict,
         by: str = "site_type",
     ) -> None:
-        """Sets the force field parameters for the framework based on the provided parameters.
+        """Set the force field parameters for the framework based on the provided parameters.
 
-        Args:
-            parameters (dict): A dictionary containing force field parameters. Each parameter should be a dictionary with keys 'sigma', 'epsilon', and 'charge'.
-            by (str): Specifies how to group the parameters. Can be either 'site_type' or 'site_label'.
+        Arguments
+        ---------
+        parameters : dict
+            A dictionary containing force field parameters. Each parameter should be a dictionary with keys
+            'sigma', 'epsilon', and 'charge'.
+        by : str
+            Specifies how to group the parameters. Can be either 'site_type' or 'site_label'.
 
-        Raises:
+        Raises
+        ------
             ValueError: If 'by' is not one of the allowed values ('site_type', 'site_label').
         """
         if by not in ["site_type", "site_label"]:
@@ -492,7 +518,8 @@ class Framework(object):
         distance_bin_size: float = 0.2,
         max_cutoff: float = 6.0,
     ):
-        """Groups atoms in a framework based on their chemical environment and assigns averaged charges to each group.
+        """Group atoms in a framework based on their chemical environment and assigns averaged charges to each group.
+
         Updates both the site labels in the dataframe and the force field parameters.
 
         Note: This function modifies site labels and charges in the dataframe, preserving original values
@@ -500,16 +527,27 @@ class Framework(object):
         with averaged charges for each group.
 
         Args:
-            bond_tolerance (float): bond tolerance in percentage (e.g. 0.15 = 15%). Used in sum of covalent radii to determine if two atoms are bonded.
-            small_charge_threshold (float): charges smaller than this value are considered small and use relative threshold for splitting
-            relative_threshold (float): relative threshold for splitting groups with small charges
-            absolute_threshold (float): absolute threshold for splitting groups with large charges
-            charge_bin_size (float): size of the charge bin for grouping atoms
-            distance_bin_size (float): size of the distance bin for fingerprinting atoms (in Angstroms)
-            max_cutoff (float): maximum distance to consider for the supercell creation, should be larger than any potential bond (in Angstroms)
+        bond_tolerance : float
+            bond tolerance in percentage (e.g. 0.15 = 15%). Used in sum of covalent radii to determine
+            if two atoms are bonded.
+        small_charge_threshold : float
+            charges smaller than this value are considered small and use relative threshold for splitting
+        relative_threshold : float
+            relative threshold for splitting groups with small charges
+        absolute_threshold : float
+            absolute threshold for splitting groups with large charges
+        charge_bin_size : float
+            size of the charge bin for grouping atoms
+        distance_bin_size : float
+            size of the distance bin for fingerprinting atoms (in Angstroms)
+        max_cutoff : float
+            maximum distance to consider for the supercell creation, should be larger
+            than any potential bond (in Angstroms)
 
-        Returns:
-            dict: A dictionary mapping atom labels to their averaged charges
+        Returns
+        -------
+        dict
+            A dictionary mapping atom labels to their averaged charges
         """
 
         def is_bonded(element1, element2, distance):
@@ -520,7 +558,8 @@ class Framework(object):
                 element2 (str): element symbol of the second atom
                 distance (float): distance between two atoms in Angstroms
 
-            Returns:
+            Returns
+            -------
                 bool: True if bonded, False otherwise
             """
             r1 = covalent_radii.get(element1, None)
@@ -537,7 +576,8 @@ class Framework(object):
             Args:
                 group_charges (numpy.ndarray): Array of charges for atoms in the group
 
-            Returns:
+            Returns
+            -------
                 bool: True if the group should be split, False otherwise
             """
             if len(group_charges) <= 1:
@@ -730,7 +770,7 @@ class Framework(object):
         system: pd.DataFrame,
         vectors: tuple[np.ndarray, np.ndarray, np.ndarray],
     ) -> None:
-        """Writes system in extxyz file format."""
+        """Write system in extxyz file format."""
         n_sites = system.shape[0]
         flat_vectors = np.concatenate(vectors)
         vectors_str = " ".join(f"{x:.10f}" for x in flat_vectors)
@@ -744,11 +784,12 @@ class Framework(object):
 
     @staticmethod
     def dl_poly_ewald(cutoff: float, box: tuple, tolerance: float = 0.00001):
-        """Parameters from the DL_POLY Algorithm
+        """Calculate `alpha` and `kmax` parameters for Ewald summation.
+
+        Recipe from the DL_POLY Algorithm
         https://doi.org/10.1080/002689798167881
         thanks to Daniel W. Siderius
         """
-        # DL_POLY Algorithm
         eps = min(tolerance, 0.5)
         xi = np.sqrt(np.abs(np.log(eps * cutoff)))
         alpha = np.sqrt(np.abs(np.log(eps * cutoff * xi))) / cutoff
@@ -765,7 +806,7 @@ class Framework(object):
         return_metadata: bool = False,
         ewald_tolerance: float = 0.00001,
     ) -> None | dict:
-        """Writes molecule file with framework for FEASST simulation software."""
+        """Write molecule file with framework for FEASST simulation software."""
         if len(unit_cells) != 3 or not all(isinstance(n, int) for n in unit_cells):
             raise ValueError("`unit_cells` must be three positive integers")
 

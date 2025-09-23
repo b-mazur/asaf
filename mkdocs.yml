@@ -9,6 +9,12 @@ site_url: https://b-mazur.github.io/asaf/
 nav:
   - Home: index.md
   - Installation guide: installation.md
+  - Reference:
+      - Overview: reference/index.md
+      - MPD: reference/mpd.md
+      - Isotherm: reference/isotherm.md
+      - Framework: reference/framework.md
+      - Utils: reference/utils.md
 
 theme:
   features:
