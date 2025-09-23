@@ -32,5 +32,5 @@ jobs:
         id: build_docs
         run: uv run mkdocs build
       - name: Rebuild and deploy docs
-        run: mkdocs gh-deploy --force
+        run: uv run mkdocs gh-deploy --force
         if: github.ref == 'refs/heads/main' && steps.build_docs.outcome == 'success'
