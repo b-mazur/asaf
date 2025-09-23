@@ -14,7 +14,7 @@ analysis of data from grand canonical transition matrix Monte Carlo adsorption s
 
 ### Download
 
-To download simply type in your terminal `pip install git+https://github.com/b-mazur/asaf.git`
+To download simply type in your terminal `pip install "asaf @ git+https://github.com/b-mazur/asaf.git"`
 
 ### Citing
 
@@ -48,12 +48,7 @@ Make sure that you are using modified version of RASPA.
 
 **My prob files are huge**
 
-In general you can play with `PrintGhostProbabilitesEvery` parameter. A more frequent print will be useful when you want
+In general, you can play with `PrintGhostProbabilitesEvery` parameter. A more frequent print will be useful when you
+want
 to use energy fluctuations to extrapolate MPD, otherwise a value similar to that used in `PrintEvery` will be sufficient
 to monitor the simulation. 
-
-> [!NOTE]
-> this is note
-
-> [!WARNING]
-> This is warning 

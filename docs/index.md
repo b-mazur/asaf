@@ -1,17 +1,13 @@
-# Welcome to MkDocs
+# Quick and easy analysis of the data from the flat histogram simulations
 
-For full documentation visit [mkdocs.org](https://www.mkdocs.org).
+***ASAF** (Adsorption Simulation Analysis Facilitator)* is a python library created to facilitate the processing and
+analysis of data from grand canonical transition matrix Monte Carlo adsorption simulations.
 
-## Commands
+### Features:
 
-* `mkdocs new [dir-name]` - Create a new project.
-* `mkdocs serve` - Start the live-reloading docs server.
-* `mkdocs build` - Build the documentation site.
-* `mkdocs -h` - Print help message and exit.
-
-## Project layout
-
-    mkdocs.yml    # The configuration file.
-    docs/
-        index.md  # The documentation homepage.
-        ...       # Other markdown pages, images and other files.
+- calculation of the macrostate probability distribution (MPC) from the transition probabilities
+- interpolation of the transition probabilities
+- calculation of the adsorption isotherm from the MPD
+- calculation of the free energy from the MPD
+- temperature extrapolation of the macrostate probability distribution
+- saving the isotherms to an AIF file
