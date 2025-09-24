@@ -94,7 +94,7 @@ def test_mpd_equilibrium_and_observables() -> None:
     minima = mpd.minimums(order=50)
     assert len(minima) == 1
     assert minima["macrostate"].values == 168
-    average_macrostate = mpd.average_macrostate()
+    average_macrostate = mpd.average_macrostate_at_fugacity(equilibrium_fugacity)
     volume = 8.0**3
     density_low = average_macrostate[0] / volume
     density_high = average_macrostate[1] / volume

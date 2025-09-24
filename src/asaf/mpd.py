@@ -418,7 +418,11 @@ class MPD:
     def average_macrostate(
         self, lnp: Optional[pd.DataFrame] = None
     ) -> Union[float, Tuple[float, float]]:
-        """Calculate the average macrostate from the MPD data."""
+        """Calculate the average macrostate from the MPD data.
+
+        Note that this function does not check for multiple phases. Use `average_macrostate_at_fugacity`
+        to calculate the average macrostate at a given fugacity, which checks for multiple phases.
+        """
         if lnp is None:
             lnp = self.lnp
         return (np.exp(lnp["lnp"]) * lnp["macrostate"]).sum()
