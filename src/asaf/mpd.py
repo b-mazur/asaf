@@ -416,28 +416,12 @@ class MPD:
             return equilibrium_fugacity
 
     def average_macrostate(
-        self, lnp: Optional[pd.DataFrame] = None, order: Optional[int] = None
+        self, lnp: Optional[pd.DataFrame] = None
     ) -> Union[float, Tuple[float, float]]:
         """Calculate the average macrostate from the MPD data."""
         if lnp is None:
             lnp = self.lnp
-        if order is None:
-            order = self.order
-        minimums = self.minimums(lnp=lnp["lnp"], order=order)
-        if len(minimums) == 0:
-            return (np.exp(lnp["lnp"]) * lnp["macrostate"]).sum()
-        else:
-            minn = minimums[minimums.lnp == minimums.lnp.min()].index[0]
-            print(minn)
-            lnp_a = lnp[:minn].copy()
-            lnp_b = lnp[minn + 1 :].copy()
-
-            lnp_a["lnp"] = normalize(lnp_a["lnp"])
-            lnp_b["lnp"] = normalize(lnp_b["lnp"])
-
-            return (np.exp(lnp_a["lnp"]) * lnp_a["macrostate"]).sum(), (
-                np.exp(lnp_b["lnp"]) * lnp_b["macrostate"]
-            ).sum()
+        return (np.exp(lnp["lnp"]) * lnp["macrostate"]).sum()
 
     def minimums(self, order: int, lnp: Optional[pd.Series] = None) -> pd.DataFrame:
         """Find the local minimums in the lnp data."""
