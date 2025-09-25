@@ -11,5 +11,5 @@ not available yet
 For the development version:
 
 ```
-pip install "asaf @ git+https://github.com/b-mazur/asaf.git"
+pip install "asaf @ git+https://github.com/bartoszmazurwro/asaf.git"
 ```

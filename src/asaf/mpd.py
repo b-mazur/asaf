@@ -415,9 +415,7 @@ class MPD:
         else:
             return equilibrium_fugacity
 
-    def average_macrostate(
-        self, lnp: Optional[pd.DataFrame] = None
-    ) -> Union[float, Tuple[float, float]]:
+    def average_macrostate(self, lnp: Optional[pd.DataFrame] = None) -> float:
         """Calculate the average macrostate from the MPD data.
 
         Note that this function does not check for multiple phases. Use `average_macrostate_at_fugacity`
