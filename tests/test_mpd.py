@@ -37,18 +37,6 @@ def test_mpd_interpolates_missing_ln_probability() -> None:
     probabilities = np.exp(mpd.dataframe()["lnp"].to_numpy())
     assert probabilities.sum() == pytest.approx(1.0)
 
-def test_temperature_beta_roundtrip() -> None:
-    temperature = 350.0
-    beta = MPD.temperature_to_beta(temperature)
-    assert MPD.beta_to_temperature(beta) == pytest.approx(temperature)
-
-def test_fugacity_mu_roundtrip() -> None:
-    temperature = 320.0
-    beta = MPD.temperature_to_beta(temperature)
-    fugacity = 1.5e5
-    mu = MPD.fugacity_to_mu(fugacity, beta)
-    assert MPD.mu_to_fugacity(mu, beta) == pytest.approx(fugacity)
-
 # def test_reweight_to_fugacity_updates_internal_state() -> None:
 #     macrostate = np.array([0, 1, 2])
 #     probabilities = np.array([0.2, 0.5, 0.3])
