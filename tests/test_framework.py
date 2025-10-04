@@ -1,4 +1,5 @@
 """Tests for the Framework class."""
+
 import json
 import math
 from pathlib import Path
@@ -15,16 +16,19 @@ from asaf.framework import Framework
 @pytest.fixture
 def orthorhombic_framework():
     """Create a tiny, orthorhombic framework with 3 sites (C, O, H)."""
-    lattice = np.array([[10.0, 0.0, 0.0],
-                        [0.0, 12.0, 0.0],
-                        [0.0, 0.0, 14.0]], dtype=float)
+    lattice = np.array(
+        [[10.0, 0.0, 0.0], [0.0, 12.0, 0.0], [0.0, 0.0, 14.0]], dtype=float
+    )
     sites = ["C_1", "O_1", "H_1"]
     site_types = ["C", "O", "H"]
-    coords = np.array([
-        [0.1, 0.2, 0.3],
-        [0.4, 0.5, 0.6],
-        [0.7, 0.8, 0.9],
-    ], dtype=float)
+    coords = np.array(
+        [
+            [0.1, 0.2, 0.3],
+            [0.4, 0.5, 0.6],
+            [0.7, 0.8, 0.9],
+        ],
+        dtype=float,
+    )
     charges = [0.10, -0.20, 0.05]
 
     return Framework(
@@ -42,10 +46,12 @@ def triclinic_framework():
     """Create a framework with a triclinic cell for testing tilt factors."""
     lattice_params = [10.0, 12.0, 14.0, 80.0, 85.0, 95.0]
     sites = ["C_1", "O_1"]
-    coords = np.array([
-        [0.25, 0.25, 0.25],
-        [0.75, 0.75, 0.75],
-    ])
+    coords = np.array(
+        [
+            [0.25, 0.25, 0.25],
+            [0.75, 0.75, 0.75],
+        ]
+    )
 
     return Framework(
         lattice=lattice_params,
@@ -66,18 +72,18 @@ class TestFrameworkInitialization:
         assert hasattr(fw, "_lattice")
         assert fw._lattice.shape == (3, 3)
         np.testing.assert_allclose(
-            fw._lattice,
-            np.diag([10.0, 12.0, 14.0]),
-            rtol=1e-10, atol=1e-10
+            fw._lattice, np.diag([10.0, 12.0, 14.0]), rtol=1e-10, atol=1e-10
         )
 
     def test_init_with_matrix(self):
         """Test initialization with direct lattice matrix."""
-        matrix = np.array([
-            [10.0, 0.0, 0.0],
-            [1.0, 12.0, 0.0],  # with xy tilt component
-            [0.0, 1.0, 14.0],  # with yz tilt component
-        ])
+        matrix = np.array(
+            [
+                [10.0, 0.0, 0.0],
+                [1.0, 12.0, 0.0],  # with xy tilt component
+                [0.0, 1.0, 14.0],  # with yz tilt component
+            ]
+        )
         fw = Framework(
             lattice=matrix,
             sites=["C_1"],
@@ -120,11 +126,13 @@ class TestFrameworkInitialization:
         fw = Framework(
             lattice=[10.0, 10.0, 10.0, 90.0, 90.0, 90.0],
             sites=["C_1", "O_2", "H_3"],
-            coordinates=np.array([
-                [0.1, 0.1, 0.1],
-                [0.2, 0.2, 0.2],
-                [0.3, 0.3, 0.3],
-            ]),
+            coordinates=np.array(
+                [
+                    [0.1, 0.1, 0.1],
+                    [0.2, 0.2, 0.2],
+                    [0.3, 0.3, 0.3],
+                ]
+            ),
         )
         assert list(fw._dataframe["site_type"]) == ["C", "O", "H"]
 
@@ -132,15 +140,21 @@ class TestFrameworkInitialization:
 class TestLatticeOperations:
     def test_lattice_parameters_to_matrix(self):
         """Test conversion from lattice parameters to matrix."""
-        matrix = Framework.lattice_parameters_to_matrix(10.0, 12.0, 14.0, 90.0, 90.0, 90.0)
-        expected = np.array([
-            [10.0, 0.0, 0.0],
-            [0.0, 12.0, 0.0],
-            [0.0, 0.0, 14.0],
-        ])
+        matrix = Framework.lattice_parameters_to_matrix(
+            10.0, 12.0, 14.0, 90.0, 90.0, 90.0
+        )
+        expected = np.array(
+            [
+                [10.0, 0.0, 0.0],
+                [0.0, 12.0, 0.0],
+                [0.0, 0.0, 14.0],
+            ]
+        )
         np.testing.assert_array_almost_equal(matrix, expected, decimal=12)
         # Non-orthorhombic case
-        matrix = Framework.lattice_parameters_to_matrix(10.0, 12.0, 14.0, 80.0, 85.0, 95.0)
+        matrix = Framework.lattice_parameters_to_matrix(
+            10.0, 12.0, 14.0, 80.0, 85.0, 95.0
+        )
         assert matrix.shape == (3, 3)
         assert matrix[0, 1] == 0.0
         assert matrix[0, 2] == 0.0
@@ -156,8 +170,8 @@ class TestLatticeOperations:
         reduced = Framework._reduce_tilt_factors(box)
 
         assert reduced[3] == pytest.approx(-3.0)  # 7.0 - 10.0
-        assert reduced[4] == pytest.approx(2.0)   # unchanged
-        assert reduced[5] == pytest.approx(3.0)   # unchanged
+        assert reduced[4] == pytest.approx(2.0)  # unchanged
+        assert reduced[5] == pytest.approx(3.0)  # unchanged
         # Edge case: exactly at lx/2
         box = (10.0, 10.0, 10.0, 5.0, 0.0, 0.0)
         reduced = Framework._reduce_tilt_factors(box)
@@ -173,16 +187,20 @@ class TestLatticeOperations:
         cartesian = orthorhombic_framework.fractional_to_cartesian(fractional)
         np.testing.assert_allclose(cartesian, expected, rtol=1e-10)
         # Test with multiple points
-        fractional = np.array([
-            [0.0, 0.0, 0.0],
-            [0.5, 0.5, 0.5],
-            [1.0, 1.0, 1.0],
-        ])
-        expected = np.array([
-            [0.0, 0.0, 0.0],
-            [5.0, 6.0, 7.0],
-            [10.0, 12.0, 14.0],
-        ])
+        fractional = np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [0.5, 0.5, 0.5],
+                [1.0, 1.0, 1.0],
+            ]
+        )
+        expected = np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [5.0, 6.0, 7.0],
+                [10.0, 12.0, 14.0],
+            ]
+        )
         cartesian = orthorhombic_framework.fractional_to_cartesian(fractional)
         np.testing.assert_allclose(cartesian, expected, rtol=1e-10)
 
@@ -203,7 +221,9 @@ class TestFrameworkProperties:
         sites = ["Xx_1"]
         coords = np.array([[0.0, 0.0, 0.0]])
         with pytest.raises(KeyError):
-            Framework(lattice, sites, coords, lattice_as_matrix=True).calculate_framework_mass()
+            Framework(
+                lattice, sites, coords, lattice_as_matrix=True
+            ).calculate_framework_mass()
 
     def test_calculate_volume(self, orthorhombic_framework, triclinic_framework):
         """Test unit cell volume calculation."""
@@ -217,15 +237,27 @@ class TestFrameworkProperties:
     def test_conversion_factors(self, orthorhombic_framework):
         """Test unit conversion factor calculations."""
         conv = orthorhombic_framework.calculate_conversion_factors()
-        assert conv["molecules_uc__mol_kg"] == pytest.approx(34.46136880556896, rel=1e-5, abs=1e-8)
-        assert conv["molecules_uc__cm3_g"] == pytest.approx(772.4160708875229, rel=1e-5, abs=1e-8)
-        assert conv["molecules_uc__cm3_cm3"] == pytest.approx(22.15432861901235, rel=1e-5, abs=1e-8)
+        assert conv["molecules_uc__mol_kg"] == pytest.approx(
+            34.46136880556896, rel=1e-5, abs=1e-8
+        )
+        assert conv["molecules_uc__cm3_g"] == pytest.approx(
+            772.4160708875229, rel=1e-5, abs=1e-8
+        )
+        assert conv["molecules_uc__cm3_cm3"] == pytest.approx(
+            22.15432861901235, rel=1e-5, abs=1e-8
+        )
         # Now with an adsorbate molar mass (e.g., water ~18 g/mol)
-        conv2 = orthorhombic_framework.calculate_conversion_factors(adsorbate_molar_mass=18.01528)
-        assert conv2["molecules_uc__g_g"] == pytest.approx(0.6208312082155905, rel=1e-5, abs=1e-8)
+        conv2 = orthorhombic_framework.calculate_conversion_factors(
+            adsorbate_molar_mass=18.01528
+        )
+        assert conv2["molecules_uc__g_g"] == pytest.approx(
+            0.6208312082155905, rel=1e-5, abs=1e-8
+        )
         # Bad input
         with pytest.raises(ValueError):
-            orthorhombic_framework.calculate_conversion_factors(adsorbate_molar_mass=-1.0)
+            orthorhombic_framework.calculate_conversion_factors(
+                adsorbate_molar_mass=-1.0
+            )
 
     def test_site_helpers(self, orthorhombic_framework):
         """Test site label and type accessors."""
@@ -266,18 +298,14 @@ class TestChargeOperations:
         expected = original - (total_correction * (original / abs_sum))
         expected = expected - expected.sum() / expected.size
         # Verify charges are updated correctly (within floating point tolerance)
-        np.testing.assert_allclose(
-            charges,
-            expected,
-            rtol=1e-10, atol=1e-10
-        )
+        np.testing.assert_allclose(charges, expected, rtol=1e-10, atol=1e-10)
         # Test edge case: all charges zero
         fw = Framework(
             lattice=np.eye(3),
             sites=["A_1", "B_1"],
             coordinates=np.array([[0, 0, 0], [0.5, 0.5, 0.5]]),
             charges=[0, 0],
-            lattice_as_matrix=True
+            lattice_as_matrix=True,
         )
         fw.reduce_net_charge()
 
@@ -300,13 +328,21 @@ class TestSupercellCreation:
         df, box, vectors = orthorhombic_framework.create_supercell((2, 2, 2))
         assert len(df) == 24
         # Test centered option
-        df_center, _, _ = orthorhombic_framework.create_supercell((1, 1, 1), center=True)
-        df_nocenter, _, _ = orthorhombic_framework.create_supercell((1, 1, 1), center=False)
+        df_center, _, _ = orthorhombic_framework.create_supercell(
+            (1, 1, 1), center=True
+        )
+        df_nocenter, _, _ = orthorhombic_framework.create_supercell(
+            (1, 1, 1), center=False
+        )
         # Centered should have coordinates shifted by half box size
         center_offset = np.array([5.0, 6.0, 7.0])  # half of 10,12,14
         for i in range(3):
-            assert df_center[f"cartesian_{chr(ord('x')+i)}"].to_numpy().mean() == \
-                   pytest.approx(df_nocenter[f"cartesian_{chr(ord('x')+i)}"].to_numpy().mean() - center_offset[i])
+            assert df_center[
+                f"cartesian_{chr(ord('x') + i)}"
+            ].to_numpy().mean() == pytest.approx(
+                df_nocenter[f"cartesian_{chr(ord('x') + i)}"].to_numpy().mean()
+                - center_offset[i]
+            )
 
     def test_create_system_compatibility(self, orthorhombic_framework):
         """Test that create_system is a compatible wrapper for create_supercell."""
@@ -354,7 +390,9 @@ class TestFileIO:
         df, box, vectors = orthorhombic_framework.create_supercell((1, 1, 1))
         meta_name = tmp_path / "framework_test"
         # Write metadata and check file
-        md = orthorhombic_framework.write_metadata(meta_name, box, (1, 1, 1), 12.8, vectors)
+        md = orthorhombic_framework.write_metadata(
+            meta_name, box, (1, 1, 1), 12.8, vectors
+        )
         assert isinstance(md, dict)
         out_file = Path(str(meta_name) + ".metadata.json")
         assert out_file.exists()
@@ -377,30 +415,33 @@ class TestFileIO:
     def test_dl_poly_ewald(self, orthorhombic_framework):
         """Test Ewald parameter calculation."""
         _, box, _ = orthorhombic_framework.create_supercell((1, 1, 1))
-        alpha, kmax = orthorhombic_framework.dl_poly_ewald(cutoff=12.8, box=box, tolerance=1e-5)
+        alpha, kmax = orthorhombic_framework.dl_poly_ewald(
+            cutoff=12.8, box=box, tolerance=1e-5
+        )
 
         assert alpha > 0.0
         assert isinstance(kmax, list)
         assert len(kmax) == 3
         assert all(k >= 1 for k in kmax)
         # Test with different tolerance
-        alpha2, kmax2 = orthorhombic_framework.dl_poly_ewald(cutoff=12.8, box=box, tolerance=1e-8)
+        alpha2, kmax2 = orthorhombic_framework.dl_poly_ewald(
+            cutoff=12.8, box=box, tolerance=1e-8
+        )
         assert any(k2 >= k1 for k1, k2 in zip(kmax, kmax2))
 
     def test_write_fstprt(self, orthorhombic_framework, tmp_path, monkeypatch):
         """Test FSTPRT file writing."""
-        orthorhombic_framework.set_force_field({
-            "C": {"sigma": 3.4, "epsilon": 0.1, "charge": 0.0},
-            "O": {"sigma": 3.0, "epsilon": 0.2, "charge": -0.2},
-            "H": {"sigma": 2.5, "epsilon": 0.05, "charge": 0.2},
-        })
+        orthorhombic_framework.set_force_field(
+            {
+                "C": {"sigma": 3.4, "epsilon": 0.1, "charge": 0.0},
+                "O": {"sigma": 3.0, "epsilon": 0.2, "charge": -0.2},
+                "H": {"sigma": 2.5, "epsilon": 0.05, "charge": 0.2},
+            }
+        )
         # Write FSTPRT file
         out_path = tmp_path / "framework"
         meta = orthorhombic_framework.write_fstprt(
-            out_path,
-            unit_cells=(1, 1, 1),
-            cutoff=12.8,
-            return_metadata=True
+            out_path, unit_cells=(1, 1, 1), cutoff=12.8, return_metadata=True
         )
         # Check metadata was returned
         assert isinstance(meta, dict)
@@ -464,7 +505,9 @@ class TestCifImport:
 
     def test_from_cif_errors(self, monkeypatch):
         """Test error handling in from_cif."""
-        monkeypatch.setattr(cif, "read", lambda filename: exec('raise ValueError("Test error")'))
+        monkeypatch.setattr(
+            cif, "read", lambda filename: exec('raise ValueError("Test error")')
+        )
         with pytest.raises(ValueError, match="Unable to read CIF"):
             Framework.from_cif(Path("nonexistent.cif"))
         # Mock for wrong symmetry
@@ -483,8 +526,7 @@ class TestAdvancedFeatures:
         orthorhombic_framework._dataframe["site_charge"] = [0.2, -0.3, 0.1]
         # Group sites
         groups = orthorhombic_framework.group_sites_by_charge(
-            bond_tolerance=0.15,
-            charge_bin_size=0.05
+            bond_tolerance=0.15, charge_bin_size=0.05
         )
         # Should have at least one group
         assert isinstance(groups, dict)

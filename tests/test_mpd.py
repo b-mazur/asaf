@@ -17,25 +17,22 @@ def test_mpd_requires_probability_or_lnp_columns() -> None:
     with pytest.raises(ValueError):
         MPD(dataframe=df, temperature=300.0, fugacity=1000.0)
 
+
 def test_mpd_requires_beta_mu_or_fugacity() -> None:
-    df = pd.DataFrame({
-        "macrostate": [0, 1, 2],
-        "P_up": [0.1, 0.2, 0.3],
-        "P_down": [0.2, 0.3, 0.4]
-    })
+    df = pd.DataFrame(
+        {"macrostate": [0, 1, 2], "P_up": [0.1, 0.2, 0.3], "P_down": [0.2, 0.3, 0.4]}
+    )
     with pytest.raises(ValueError):
         MPD(dataframe=df, temperature=300.0)
 
+
 def test_mpd_interpolates_missing_ln_probability() -> None:
-    df = pd.DataFrame({
-        "macrostate": [0, 2],
-        "P_up": [0.1, 0.3],
-        "P_down": [0.2, 0.4]
-    })
+    df = pd.DataFrame({"macrostate": [0, 2], "P_up": [0.1, 0.3], "P_down": [0.2, 0.4]})
     mpd = MPD(dataframe=df, temperature=300.0, fugacity=1000.0)
     assert list(mpd.dataframe()["macrostate"]) == [0, 1, 2]
     probabilities = np.exp(mpd.dataframe()["lnp"].to_numpy())
     assert probabilities.sum() == pytest.approx(1.0)
+
 
 # def test_reweight_to_fugacity_updates_internal_state() -> None:
 #     macrostate = np.array([0, 1, 2])
@@ -62,11 +59,13 @@ def test_mpd_interpolates_missing_ln_probability() -> None:
 #     assert mpd.fugacity == pytest.approx(new_fugacity)
 #     assert mpd.mu == pytest.approx(mu_new)
 
+
 def test_normalize_creates_unit_probability_distribution() -> None:
     values = np.array([-1.0, -2.0, -3.0])
     normalized = normalize(values)
     probabilities = np.exp(normalized)
     assert probabilities.sum() == pytest.approx(1.0)
+
 
 def test_mpd_equilibrium_and_observables() -> None:
     """This test uses data from NIST SRWS
@@ -75,7 +74,9 @@ def test_mpd_equilibrium_and_observables() -> None:
     """
     data_path = Path(__file__).parent / "data" / "mpd_lj_120.csv"
     mpd = MPD(dataframe=pd.read_csv(data_path), temperature=144.3, beta_mu=-2.902929)
-    equilibrium_fugacity, p_low, p_high = mpd.find_phase_equilibrium(return_probabilities=True)
+    equilibrium_fugacity, p_low, p_high = mpd.find_phase_equilibrium(
+        return_probabilities=True
+    )
     assert p_low == pytest.approx(0.5, rel=1e-4)
     assert p_high == pytest.approx(0.5, rel=1e-4)
     mpd.reweight_to_fug(equilibrium_fugacity, inplace=True)

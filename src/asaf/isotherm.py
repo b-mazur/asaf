@@ -1,4 +1,5 @@
 """Provides the Isotherm class to store, manipulate, plot and save adsorption isotherm data."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -125,6 +126,7 @@ class Isotherm:
         self, target_unit: str, conversion_factor: Optional[float] = None
     ) -> None:
         """Convert the uptake column to the target unit."""
+
         def get_conversion_factor(current_unit: str, new_unit: str) -> float:
             """Retrieve or compute the conversion factor between units.
 
@@ -186,7 +188,7 @@ class Isotherm:
         """
         import plotly.colors as pc
         import plotly.graph_objects as go
-        
+
         # get or create figure
         show_immediately = False
         if fig is None:
@@ -338,7 +340,7 @@ class Isotherm:
         None
         """
         from gemmi import cif
-        
+
         metadata = self.metadata
         key_mapper = {
             "_exptl_temperature": "temperature",

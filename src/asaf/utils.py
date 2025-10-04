@@ -1,4 +1,5 @@
 """Utility functions for the ASAF package."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -17,6 +18,7 @@ from asaf.constants import _BOLTZMANN_CONSTANT
 def quote(string: str) -> str:
     """Quotes a string with single quotes."""
     return f"'{string}'"
+
 
 def interpolate_df(df: pd.DataFrame, based_on: str = "macrostate") -> pd.DataFrame:
     """Interpolates data in a dataframe.
@@ -45,6 +47,7 @@ def interpolate_df(df: pd.DataFrame, based_on: str = "macrostate") -> pd.DataFra
         df_interp[col] = val_interp
 
     return df_interp
+
 
 def calculate_lnp(prob_df: pd.DataFrame) -> pd.DataFrame:
     """Calculate the natural logarithm of the macrostate transition probability[1].
@@ -81,6 +84,7 @@ def calculate_lnp(prob_df: pd.DataFrame) -> pd.DataFrame:
     )
     return lnp_df
 
+
 def normalize(lnp: Union[pd.Series, np.ndarray]) -> Union[pd.Series, np.ndarray]:
     """
     Normalize the natural logarithm of the macrostate probability.
@@ -100,15 +104,18 @@ def normalize(lnp: Union[pd.Series, np.ndarray]) -> Union[pd.Series, np.ndarray]
 
     return lnp_cp
 
+
 def beta_to_temperature(beta: ArrayLike) -> ArrayLike:
     """Convert beta (in J^-1) to temperature (in K) using Boltzmann constant."""
     temp = 1 / _BOLTZMANN_CONSTANT / beta
     return temp
 
+
 def temperature_to_beta(temp: ArrayLike) -> ArrayLike:
     """Convert temperature (in K) to beta (in J^-1) using Boltzmann constant."""
     beta = 1 / _BOLTZMANN_CONSTANT / temp
     return beta
+
 
 def fugacity_to_mu(fugacity: ArrayLike, beta: float) -> ArrayLike:
     """Convert fugacity (in Pa) to chemical potential (in J).
@@ -119,6 +126,7 @@ def fugacity_to_mu(fugacity: ArrayLike, beta: float) -> ArrayLike:
     """
     mu = np.log(fugacity * 1e-30 * beta) / beta  # J A^-3
     return mu
+
 
 def mu_to_fugacity(mu: ArrayLike, beta: float) -> ArrayLike:
     """Convert chemical potential (in J) to fugacity (in Pa).

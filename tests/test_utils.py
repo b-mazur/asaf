@@ -14,10 +14,12 @@ from asaf.utils import (
 def test_quote_wraps_string_in_single_quotes() -> None:
     assert quote("example") == "'example'"
 
+
 def test_temperature_beta_roundtrip() -> None:
     temperature = 350.0
     beta = temperature_to_beta(temperature)
     assert beta_to_temperature(beta) == pytest.approx(temperature)
+
 
 def test_fugacity_mu_roundtrip() -> None:
     temperature = 320.0

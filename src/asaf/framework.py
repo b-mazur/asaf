@@ -48,8 +48,8 @@ class Framework(object):
     ):
         """Initialize the Framework object from lattice parameters, site labels, and coordinates.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         lattice : list or array-like
             Lattice parameters as a list of six floats representing the lengths (a, b, c) and
             angles (alpha, beta, gamma) of the unit cell or as a 3x3 matrix. If matrix is provided,
@@ -127,8 +127,8 @@ class Framework(object):
 
         Here lower triangular form is used, for row -> vector cell convention.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         a, b, c : float
             lengths of the unit cell edges
         alpha, beta, gamma : float
@@ -151,11 +151,13 @@ class Framework(object):
         )
 
     @staticmethod
-    def matrix_to_lattice_parameters(lattice: NDArray) -> Tuple[float, float, float, float, float, float]:
+    def matrix_to_lattice_parameters(
+        lattice: NDArray,
+    ) -> Tuple[float, float, float, float, float, float]:
         """Convert a 3x3 lattice matrix (row->vector convention) to lengths and angles.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         lattice : NDArray
             3x3 matrix representing the unit cell vectors, each row is a vector
 
@@ -193,12 +195,13 @@ class Framework(object):
         gamma = angle_deg(a_vec, b_vec)
         return a, b, c, alpha, beta, gamma
 
-
-    def fractional_to_cartesian(self, fractional_coords: NDArray, lattice: NDArray = None) -> NDArray:
+    def fractional_to_cartesian(
+        self, fractional_coords: NDArray, lattice: NDArray = None
+    ) -> NDArray:
         """Convert fractional coordinates to cartesian coordinates.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         fractional_coords : NDArray
             Nx3 array of fractional coordinates
         lattice : NDArray, optional
@@ -222,8 +225,8 @@ class Framework(object):
     ) -> Framework:
         """Read the CIF file and populate self._dataframe.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         cif_file : Path
             Path to the CIF file.
         remove_site_labels : bool
@@ -306,11 +309,13 @@ class Framework(object):
             self._framework_unitcell_volume = abs(np.linalg.det(self._lattice))
         return self._framework_unitcell_volume
 
-    def calculate_conversion_factors(self, adsorbate_molar_mass: Optional[float] = None):
+    def calculate_conversion_factors(
+        self, adsorbate_molar_mass: Optional[float] = None
+    ):
         """Calculate the conversion factors for the isotherm recalculation.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         adsorbate_molar_mass : float, optional
             Molar mass of the adsorbate in g/mol. If provided, the g/g conversion factor will be calculated.
 
@@ -325,7 +330,9 @@ class Framework(object):
         """
         mass = self.calculate_framework_mass()
         volume = self.calculate_framework_unitcell_volume()
-        vm_cm3_per_mol = 1.0e6 *(_MOLAR_GAS_CONSTANT * 273.15 / _ATM_TO_PA)  # cm3 (STP) / mol
+        vm_cm3_per_mol = 1.0e6 * (
+            _MOLAR_GAS_CONSTANT * 273.15 / _ATM_TO_PA
+        )  # cm3 (STP) / mol
 
         # molecules / unit cell -> mol / kg
         molecules_uc__mol_kg = 1000 / mass
@@ -352,12 +359,11 @@ class Framework(object):
                 "molecules_uc__cm3_cm3": molecules_uc__cm3_cm3,
             }
 
-
     def site_labels(self, as_list: bool = False) -> List[str] | pd.Series:
         """Return the site labels as a list or pandas Series.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         as_list : bool
             If True, return as a list. If False, return as a pandas Series.
 
@@ -374,8 +380,8 @@ class Framework(object):
     def site_types(self, as_list: bool = False) -> List[str] | pd.Series:
         """Return the site types as a list or pandas Series.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         as_list : bool
             If True, return as a list. If False, return as a pandas Series.
 
@@ -394,8 +400,8 @@ class Framework(object):
 
         Prints a warning if |net_charge| > 1e-5 e.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         unit_cells : tuple
             how many times to replicate in (x, y, z).
 
@@ -456,6 +462,11 @@ class Framework(object):
         LAMMPS requires tilt factors to be within specific ranges relative to box lengths:
           xy,xz ∈ (-lx/2, lx/2],  yz ∈ (-ly/2, ly/2]
         https://docs.lammps.org/Howto_triclinic.html#periodicity-and-tilt-factors-for-triclinic-simulation-boxes
+
+        Parameters
+        ----------
+        box : tuple
+            Box parameters as (lx, ly, lz, xy, xz, yz)
         """
         lx, ly, lz, xy, xz, yz = box
 
@@ -484,9 +495,7 @@ class Framework(object):
         yz_new = remap_tilt(yz, ly)
 
         if not (
-            np.isclose(xy, xy_new)
-            and np.isclose(xz, xz_new)
-            and np.isclose(yz, yz_new)
+            np.isclose(xy, xy_new) and np.isclose(xz, xz_new) and np.isclose(yz, yz_new)
         ):
             parts = []
             if not np.isclose(xy, xy_new):
@@ -496,18 +505,17 @@ class Framework(object):
             if not np.isclose(yz, yz_new):
                 parts.append(f"yz: {yz:.6f} → {yz_new:.6f}")
             if parts:
-                logger.info(
-                    "Tilt factors reduced: " + ", ".join(parts)
-                )
+                logger.info("Tilt factors reduced: " + ", ".join(parts))
 
         return lx, ly, lz, xy_new, xz_new, yz_new
 
-    def create_supercell(self, unit_cells: tuple[int, int, int] = (1, 1, 1), center: bool = True) -> tuple[
-        DataFrame, tuple[float, ...], tuple[Any, Any, Any]]:
+    def create_supercell(
+        self, unit_cells: tuple[int, int, int] = (1, 1, 1), center: bool = True
+    ) -> tuple[DataFrame, tuple[float, ...], tuple[Any, Any, Any]]:
         """Create a supercell by replicating the unit cell.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         unit_cells : tuple[int, int, int]
             Number of unit cells to replicate in (x, y, z) directions. Default is (1, 1, 1).
         center : bool
@@ -625,8 +633,8 @@ class Framework(object):
     ) -> None:
         """Set the force field parameters for the framework based on the provided parameters.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         parameters : dict
             A dictionary containing force field parameters. Each parameter should be a dictionary with keys
             'sigma', 'epsilon', and 'charge'.
@@ -692,8 +700,8 @@ class Framework(object):
         in 'site_original_label' and 'site_original_charge' columns. It also updates the force field
         with averaged charges for each group.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         bond_tolerance : float
             bond tolerance in percentage (e.g. 0.15 = 15%). Used in sum of covalent radii to determine
             if two atoms are bonded.
@@ -720,8 +728,8 @@ class Framework(object):
         def is_bonded(element1: str, element2: str, distance: float):
             """Check if two elements are bonded based on distance and their covalent radii.
 
-            Arguments
-            ---------
+            Parameters
+            ----------
             element1 : str
                 element symbol of the first atom
             element2 : str
@@ -745,8 +753,8 @@ class Framework(object):
         def should_split_group(group_charges: NDArray) -> bool:
             """Determine if a group should be split based on charge variation.
 
-            Arguments
-            ---------
+            Parameters
+            ----------
             group_charges : NDArray
                 Array of charges for atoms in the group
 
@@ -821,10 +829,12 @@ class Framework(object):
                 ):
                     continue
 
-                distance = float(np.linalg.norm(
-                    cartesian_coordinates[i]
-                    - supercell_coordinates[neighbor_supercell_idx]
-                ))
+                distance = float(
+                    np.linalg.norm(
+                        cartesian_coordinates[i]
+                        - supercell_coordinates[neighbor_supercell_idx]
+                    )
+                )
                 neighbor_element = str(df.loc[neighbor_original_idx, "site_type"])
 
                 if is_bonded(neighbor_element, central_element, distance):
@@ -946,8 +956,8 @@ class Framework(object):
     ) -> None:
         """Write system in extxyz file format.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         file_name : str
             Base name for the output file (without extension).
         system : pd.DataFrame
@@ -974,8 +984,8 @@ class Framework(object):
         https://doi.org/10.1080/002689798167881
         thanks to Daniel W. Siderius
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         cutoff : float
             real space cutoff in Angstroms
         box : tuple
@@ -1008,8 +1018,8 @@ class Framework(object):
     ) -> None | dict:
         """Write molecule file with framework for FEASST simulation software.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         file_name : str or Path
             Base name for the output file (without extension).
         unit_cells : Tuple[int, int, int]

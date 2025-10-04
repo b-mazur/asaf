@@ -1,4 +1,5 @@
 """Module for handling Macrostate Probability Distribution (MPD) data."""
+
 from __future__ import annotations
 
 import json
@@ -282,8 +283,8 @@ class MPD:
     ) -> Union[Tuple[float, float, float], float]:
         """Find the fugacity at which the two phases are in equilibrium.
 
-        Arguments
-        ---------
+        Parameters
+        ----------
         tolerance
             Tolerance for the root finding algorithm.
         max_iterations
@@ -491,6 +492,7 @@ class MPD:
             pressure:
         """
         from asaf import Isotherm
+
         stable_phase = []
         metastable_gas = []
         metastable_liq = []
@@ -599,4 +601,3 @@ class MPD:
             fugacity=mu_to_fugacity(self.mu, beta),
             metadata=self.metadata,
         )
-

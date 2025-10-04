@@ -239,6 +239,7 @@ covalent_radii = {
     "Cm": 1.69,
 }
 
+
 class ForceFieldParameters:
     """
     Container for most common force fields in a conventional 12-6 LJ potential.
