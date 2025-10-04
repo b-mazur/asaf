@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-from math import factorial
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -557,17 +556,23 @@ class MPD:
         Parameters
         ----------
         temperature
-            Temperature to which to extrapolate MPD.
+            Temperature (in K) to which to extrapolate MPD.
         energy
-            Energy fluctuation data. If None ASAF will look for data in prob_df.
+            Energy fluctuation data. If None ASAF will look for data in prob_df. Unit must be J.
         terms
-            Number of Taylor series terms used for extrapolation.
+            Number of Taylor series terms used for extrapolation. Note that `energy` must contain columns
+            named `term_1`, `term_2`, ..., `term_n` where n is the number of terms.
 
         Returns
         -------
         MPD
             Extrapolated MPD.
         """
+        from math import factorial
+
+        if terms < 1:
+            raise ValueError("Number of terms must be at least 1.")
+
         if energy is None:
             if "term_1" in self._dataframe.columns:
                 energy = self._dataframe[["macrostate", "term_1"]].copy()

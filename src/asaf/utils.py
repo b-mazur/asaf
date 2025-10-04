@@ -101,21 +101,31 @@ def normalize(lnp: Union[pd.Series, np.ndarray]) -> Union[pd.Series, np.ndarray]
     return lnp_cp
 
 def beta_to_temperature(beta: ArrayLike) -> ArrayLike:
-    """Convert beta to temperature using Boltzmann constant."""
+    """Convert beta (in J^-1) to temperature (in K) using Boltzmann constant."""
     temp = 1 / _BOLTZMANN_CONSTANT / beta
     return temp
 
 def temperature_to_beta(temp: ArrayLike) -> ArrayLike:
-    """Convert temperature to beta using Boltzmann constant."""
+    """Convert temperature (in K) to beta (in J^-1) using Boltzmann constant."""
     beta = 1 / _BOLTZMANN_CONSTANT / temp
     return beta
 
 def fugacity_to_mu(fugacity: ArrayLike, beta: float) -> ArrayLike:
-    """Convert fugacity (in Pa) to chemical potential (in J A^-3)."""
+    """Convert fugacity (in Pa) to chemical potential (in J).
+
+    Note: the volume scale for fugacity is Å^3.
+    Ref: Equation 73 in Dubbeldam et al., Molecular Simulation, 2013, Vol. 39, Nos. 14–15, 1253–1292,
+    https://dx.doi.org/10.1080/08927022.2013.819102
+    """
     mu = np.log(fugacity * 1e-30 * beta) / beta  # J A^-3
     return mu
 
 def mu_to_fugacity(mu: ArrayLike, beta: float) -> ArrayLike:
-    """Convert chemical potential (in J A^-3) to fugacity (in Pa)."""
+    """Convert chemical potential (in J) to fugacity (in Pa).
+
+    Note: the volume scale for fugacity is Å^3.
+    Ref: Equation 73 in Dubbeldam et al., Molecular Simulation, 2013, Vol. 39, Nos. 14–15, 1253–1292,
+    https://dx.doi.org/10.1080/08927022.2013.819102
+    """
     fug = np.exp(beta * mu) / beta / 1e-30  # Pa
     return fug
