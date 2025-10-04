@@ -7,18 +7,25 @@ import logging
 import math
 from itertools import product
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
 from gemmi import cif
+from pandas import DataFrame
 
-from asaf.constants import _ATM_TO_PA, _MOLAR_GAS_CONSTANT, atomic_mass, covalent_radii
+from asaf.constants import (
+    _ATM_TO_PA,
+    _AVOGADRO_CONSTANT,
+    _MOLAR_GAS_CONSTANT,
+    atomic_mass,
+    covalent_radii,
+)
 
 if TYPE_CHECKING:
-    from typing import Dict, List, Optional
+    from typing import Dict, List, Literal, Optional, Tuple
 
-    from numpy.typing import ArrayLike
+    from numpy.typing import ArrayLike, NDArray
 
 logger = logging.getLogger(__name__)
 
@@ -41,19 +48,26 @@ class Framework(object):
     ):
         """Initialize the Framework object from lattice parameters, site labels, and coordinates.
 
-        Args:
-            lattice : list
-                Lattice parameters as a list of six floats representing the lengths (a, b, c) and
-                angles (alpha, beta, gamma) of the unit cell or as a 3x3 matrix. If matrix is provided,
-                `lattice_as_matrix` should be set to True
-            sites : list
-                Site labels or indices corresponding to the atomic numbers of the sites
-            coordinates : array-like
-                2D array of shape (n_sites, 3) containing the fractional coordinates of the sites in the unit cell
-            lattice_as_matrix : bool
-                If True, `lattice` is treated as a 3x3 matrix representing the unit cell vectors.
-                If False, it is treated as a list of six floats representing the lattice parameters
-                (a, b, c, alpha, beta, gamma).
+        Arguments
+        ---------
+        lattice : list or array-like
+            Lattice parameters as a list of six floats representing the lengths (a, b, c) and
+            angles (alpha, beta, gamma) of the unit cell or as a 3x3 matrix. If matrix is provided,
+            `lattice_as_matrix` should be set to True.
+            Note that asaf uses the row -> vector convention lattice matrix.
+        sites : list
+            Site labels or indices corresponding to the atomic numbers of the sites
+        coordinates : array-like
+            2D array of shape (n_sites, 3) containing the fractional coordinates of the sites in the unit cell
+        lattice_as_matrix : bool
+            If True, `lattice` is treated as a 3x3 matrix representing the unit cell vectors.
+            If False, it is treated as a list of six floats representing the lattice parameters
+            (a, b, c, alpha, beta, gamma).
+        site_types : list, optional
+            List of site types (element symbols) corresponding to each site. If None, site labels
+            will be used to infer types by stripping numeric suffixes.
+        charges : list, optional
+            List of partial charges for each site. If None, all charges will be set to zero.
         """
         if lattice_as_matrix:
             if lattice.shape != (3, 3):
@@ -61,6 +75,9 @@ class Framework(object):
                     "If `lattice_as_matrix` is True, `lattice` must be a 3x3 matrix."
                 )
             self._lattice = lattice
+            a, b, c, alpha, beta, gamma = self.matrix_to_lattice_parameters(lattice)
+            self._cell_lengths = (a, b, c)
+            self._cell_angles = (alpha, beta, gamma)
         else:
             if len(lattice) != 6:
                 raise ValueError(
@@ -91,10 +108,13 @@ class Framework(object):
         )
 
         self._framework_mol_mass = None
+        self._framework_unitcell_volume = None
         self._force_field = {}
 
     @staticmethod
-    def lattice_parameters_to_matrix(a, b, c, alpha, beta, gamma):
+    def lattice_parameters_to_matrix(
+        a: float, b: float, c: float, alpha: float, beta: float, gamma: float
+    ) -> ArrayLike:
         """Convert lattice parameters to a 3x3 matrix representation of the unit cell.
 
         source: https://dx.doi.org/10.1080/08927022.2013.819102
@@ -107,13 +127,17 @@ class Framework(object):
 
         Here lower triangular form is used, for row -> vector cell convention.
 
-        Args:
-            a, b, c (float): lengths of the unit cell edges
-            alpha, beta, gamma (float): angles between the edges in degrees
+        Arguments
+        ---------
+        a, b, c : float
+            lengths of the unit cell edges
+        alpha, beta, gamma : float
+            angles between the edges in degrees
 
         Returns
         -------
-            np.ndarray: 3x3 matrix representing the unit cell vectors, each row is a vector
+        np.ndarray
+            3x3 matrix representing the unit cell vectors, each row is a vector
         """
         alpha, beta, gamma = np.radians(alpha), np.radians(beta), np.radians(gamma)
         z = (np.cos(alpha) - np.cos(gamma) * np.cos(beta)) / np.sin(gamma)
@@ -126,12 +150,59 @@ class Framework(object):
             ]
         )
 
-    def fractional_to_cartesian(self, fractional_coords, lattice=None):
+    @staticmethod
+    def matrix_to_lattice_parameters(lattice: NDArray) -> Tuple[float, float, float, float, float, float]:
+        """Convert a 3x3 lattice matrix (row->vector convention) to lengths and angles.
+
+        Arguments
+        ---------
+        lattice : NDArray
+            3x3 matrix representing the unit cell vectors, each row is a vector
+
+        Returns
+        -------
+        Tuple[float, float, float, float, float, float]
+            Lattice parameters as (a, b, c, alpha, beta, gamma), where lengths are in Angstroms and angles in degrees.
+            Angles are defined as:
+            - alpha=angle(b,c)
+            - beta=angle(a,c)
+            - gamma=angle(a,b)
+        """
+        H = np.asarray(lattice, dtype=float)
+        if H.shape != (3, 3):
+            raise ValueError("`lattice` must be a 3x3 matrix")
+        a_vec, b_vec, c_vec = H[0], H[1], H[2]
+
+        def norm(v):
+            return float(np.linalg.norm(v))
+
+        def angle_deg(u, v):
+            denominator = np.linalg.norm(u) * np.linalg.norm(v)
+            if denominator == 0:
+                raise ValueError("Zero-length lattice vector")
+            cos_ang = float(np.dot(u, v) / denominator)
+            # Clamp for numerical safety
+            cos_ang = max(-1.0, min(1.0, cos_ang))
+            return float(np.degrees(np.arccos(cos_ang)))
+
+        a = norm(a_vec)
+        b = norm(b_vec)
+        c = norm(c_vec)
+        alpha = angle_deg(b_vec, c_vec)
+        beta = angle_deg(a_vec, c_vec)
+        gamma = angle_deg(a_vec, b_vec)
+        return a, b, c, alpha, beta, gamma
+
+
+    def fractional_to_cartesian(self, fractional_coords: NDArray, lattice: NDArray = None) -> NDArray:
         """Convert fractional coordinates to cartesian coordinates.
 
-        Args:
-            fractional_coords: Nx3 array of fractional coordinates
-            lattice: Optional 3x3 lattice matrix. If None, uses self._lattice
+        Arguments
+        ---------
+        fractional_coords : NDArray
+            Nx3 array of fractional coordinates
+        lattice : NDArray, optional
+            3x3 lattice matrix. If None, uses self._lattice
 
         Returns
         -------
@@ -149,7 +220,22 @@ class Framework(object):
         remove_site_labels: bool = False,
         partial_charge_header: str = "_atom_site_charge",
     ) -> Framework:
-        """Read the CIF file and populate self._dataframe."""
+        """Read the CIF file and populate self._dataframe.
+
+        Arguments
+        ---------
+        cif_file : Path
+            Path to the CIF file.
+        remove_site_labels : bool
+            If True, remove numeric suffixes from site labels to infer site types.
+        partial_charge_header : str
+            CIF tag for partial charges. Default is '_atom_site_charge'.
+
+        Returns
+        -------
+        Framework
+            An instance of the Framework class populated with data from the CIF file.
+        """
         logger.info("Reading CIF file: %s", cif_file)
         try:
             cif_data = cif.read(str(cif_file))
@@ -211,31 +297,99 @@ class Framework(object):
             self._framework_mol_mass = masses.sum()
         return self._framework_mol_mass
 
-    def calculate_conversion_factors(self):
-        """Calculate the conversion factors for the isotherm recalculation."""
+    def calculate_framework_unitcell_volume(self):
+        """Calculate the volume of the unit cell.
+
+        Units: Angstrom^3 / unit cell
+        """
+        if self._framework_unitcell_volume is None:
+            self._framework_unitcell_volume = abs(np.linalg.det(self._lattice))
+        return self._framework_unitcell_volume
+
+    def calculate_conversion_factors(self, adsorbate_molar_mass: Optional[float] = None):
+        """Calculate the conversion factors for the isotherm recalculation.
+
+        Arguments
+        ---------
+        adsorbate_molar_mass : float, optional
+            Molar mass of the adsorbate in g/mol. If provided, the g/g conversion factor will be calculated.
+
+        Returns
+        -------
+        dict
+            A dictionary containing the conversion factors:
+            - 'molecules_uc__mol_kg': molecules/unit cell to mol/kg
+            - 'molecules_uc__cm3_g': molecules/unit cell to cm3 (STP)/g
+            - 'molecules_uc__cm3_cm3': molecules/unit cell to cm3 (STP)/cm3
+            - 'molecules_uc__g_g': molecules/unit cell to g/g (if adsorbate_molar_mass is provided)
+        """
         mass = self.calculate_framework_mass()
+        volume = self.calculate_framework_unitcell_volume()
+        vm_cm3_per_mol = 1.0e6 *(_MOLAR_GAS_CONSTANT * 273.15 / _ATM_TO_PA)  # cm3 (STP) / mol
+
         # molecules / unit cell -> mol / kg
-        self._molecules_uc__mol_kg = 1000 / mass
+        molecules_uc__mol_kg = 1000 / mass
         # molecules / unit cell -> cm3 / g
-        self._molecules_uc__cm3_g = (
-            1.0e6 * (_MOLAR_GAS_CONSTANT * 273.15 / _ATM_TO_PA) / mass
-        )
+        molecules_uc__cm3_g = vm_cm3_per_mol / mass
+        # molecules / unit cell -> cm3 (STP) / cm3
+        molecules_uc__cm3_cm3 = vm_cm3_per_mol / (_AVOGADRO_CONSTANT * volume * 1e-24)
+
+        if adsorbate_molar_mass is not None:
+            if adsorbate_molar_mass <= 0:
+                raise ValueError("Adsorbate molar mass must be positive.")
+            # molecules / unit cell -> g / g
+            molecules_uc__g_g = adsorbate_molar_mass / mass
+            return {
+                "molecules_uc__mol_kg": molecules_uc__mol_kg,
+                "molecules_uc__cm3_g": molecules_uc__cm3_g,
+                "molecules_uc__cm3_cm3": molecules_uc__cm3_cm3,
+                "molecules_uc__g_g": molecules_uc__g_g,
+            }
+        else:
+            return {
+                "molecules_uc__mol_kg": molecules_uc__mol_kg,
+                "molecules_uc__cm3_g": molecules_uc__cm3_g,
+                "molecules_uc__cm3_cm3": molecules_uc__cm3_cm3,
+            }
+
 
     def site_labels(self, as_list: bool = False) -> List[str] | pd.Series:
-        """Return the site labels as a list or pandas Series."""
+        """Return the site labels as a list or pandas Series.
+
+        Arguments
+        ---------
+        as_list : bool
+            If True, return as a list. If False, return as a pandas Series.
+
+        Returns
+        -------
+        List[str] or pd.Series
+            Site labels in the requested format.
+        """
         if as_list:
             return self._dataframe["site_label"].to_list()
         else:
             return self._dataframe["site_label"]
 
     def site_types(self, as_list: bool = False) -> List[str] | pd.Series:
-        """Return the site types as a list or pandas Series."""
+        """Return the site types as a list or pandas Series.
+
+        Arguments
+        ---------
+        as_list : bool
+            If True, return as a list. If False, return as a pandas Series.
+
+        Returns
+        -------
+        List[str] or pd.Series
+            Site types in the requested format.
+        """
         if as_list:
             return self._dataframe["site_type"].to_list()
         else:
             return self._dataframe["site_type"]
 
-    def check_net_charge(self, unit_cells: tuple[int, int, int]) -> float:
+    def check_net_charge(self, unit_cells: Tuple[int, int, int]) -> float:
         """Return the total net charge of the replicated system (all UC).
 
         Prints a warning if |net_charge| > 1e-5 e.
@@ -260,12 +414,19 @@ class Framework(object):
         return system_charge
 
     def reduce_net_charge(self):
-        """Remove any net charge by proportionally subtracting from each site.
+        """Remove any net charge by proportionally adjusting each site by its signed charge.
 
         The adjustment is done as follows:
-        q_i_new = q_i_old - (sum_j q_j) * (|q_i_old| / sum_k |q_k_old|)
+            q_i_new = q_i_old - (sum_j q_j) * (q_i_old / sum_k |q_k_old|)
 
-        After this, the total charge across all sites is zero.
+        This distributes the total correction in proportion to the **signed** charges (not absolute values).
+        As a result, atoms with larger |q| change more than atoms with smaller |q|, but corrections can
+        push some sites away from zero. A small uniform residual is then subtracted to ensure exact neutrality.
+
+        Notes
+        -----
+        - If Σ_k |q_k_old| == 0 (all zero charges), the function logs an error and returns without change.
+        - This function currently updates only the charges in the dataframe, not in the force field.
         #TODO: this averages charges only in dataframe, not in the force field.
         """
         total = self._dataframe["site_charge"].sum()
@@ -341,20 +502,24 @@ class Framework(object):
 
         return lx, ly, lz, xy_new, xz_new, yz_new
 
-    def create_supercell(self, unit_cells=(1, 1, 1), center=True):
+    def create_supercell(self, unit_cells: tuple[int, int, int] = (1, 1, 1), center: bool = True) -> tuple[
+        DataFrame, tuple[float, ...], tuple[Any, Any, Any]]:
         """Create a supercell by replicating the unit cell.
 
-        Args:
-            unit_cells: Tuple of (nx, ny, nz) repetitions along each axis
-            center: Whether to center the coordinates around origin
+        Arguments
+        ---------
+        unit_cells : tuple[int, int, int]
+            Number of unit cells to replicate in (x, y, z) directions. Default is (1, 1, 1).
+        center : bool
+            If True, center the coordinates in the box. Default is True.
 
         Returns
         -------
-            tuple: (
-                DataFrame with site_label and cartesian coordinates,
-                box dimensions,
-                lattice vectors
-            )
+        Tuple[pd.DataFrame, Tuple[float, float, float, float, float, float], Tuple[np.ndarray, np.ndarray, np.ndarray]]
+            A tuple containing:
+            - DataFrame with columns ['site_label', 'cartesian_x', 'cartesian_y', 'cartesian_z']
+            - Box parameters as a tuple (lx, ly, lz, xy, xz, yz)
+            - Cell vectors as a tuple of three numpy arrays (a_vec, b_vec, c_vec)
         """
         nx, ny, nz = unit_cells
 
@@ -427,7 +592,7 @@ class Framework(object):
 
         return system, box, vectors
 
-    def create_system(self, unit_cells=(1, 1, 1)):
+    def create_system(self, unit_cells: tuple[int, int, int] = (1, 1, 1)):
         """Create a supercell system (wrapper around create_supercell for backward compatibility)."""
         return self.create_supercell(unit_cells)
 
@@ -456,7 +621,7 @@ class Framework(object):
     def set_force_field(
         self,
         parameters: Dict,
-        by: str = "site_type",
+        by: Literal["site_type", "site_label"] = "site_type",
     ) -> None:
         """Set the force field parameters for the framework based on the provided parameters.
 
@@ -506,7 +671,8 @@ class Framework(object):
         if self._force_field and self._force_field != new_force_field:
             logger.warning("Updating force field parameters.")
 
-        self._force_field = new_force_field
+        self._force_field.clear()
+        self._force_field.update(new_force_field)
 
     def group_sites_by_charge(
         self,
@@ -526,7 +692,8 @@ class Framework(object):
         in 'site_original_label' and 'site_original_charge' columns. It also updates the force field
         with averaged charges for each group.
 
-        Args:
+        Arguments
+        ---------
         bond_tolerance : float
             bond tolerance in percentage (e.g. 0.15 = 15%). Used in sum of covalent radii to determine
             if two atoms are bonded.
@@ -550,17 +717,22 @@ class Framework(object):
             A dictionary mapping atom labels to their averaged charges
         """
 
-        def is_bonded(element1, element2, distance):
+        def is_bonded(element1: str, element2: str, distance: float):
             """Check if two elements are bonded based on distance and their covalent radii.
 
-            Args:
-                element1 (str): element symbol of the first atom
-                element2 (str): element symbol of the second atom
-                distance (float): distance between two atoms in Angstroms
+            Arguments
+            ---------
+            element1 : str
+                element symbol of the first atom
+            element2 : str
+                element symbol of the second atom
+            distance : float
+                distance between two atoms in Angstroms
 
             Returns
             -------
-                bool: True if bonded, False otherwise
+            bool
+                True if bonded, False otherwise
             """
             r1 = covalent_radii.get(element1, None)
             r2 = covalent_radii.get(element2, None)
@@ -570,11 +742,13 @@ class Framework(object):
                 )
             return distance <= ((r1 + r2) * (1 + bond_tolerance))
 
-        def should_split_group(group_charges):
+        def should_split_group(group_charges: NDArray) -> bool:
             """Determine if a group should be split based on charge variation.
 
-            Args:
-                group_charges (numpy.ndarray): Array of charges for atoms in the group
+            Arguments
+            ---------
+            group_charges : NDArray
+                Array of charges for atoms in the group
 
             Returns
             -------
@@ -634,7 +808,7 @@ class Framework(object):
 
         all_neighbors = {}
         for i in range(len(df)):
-            central_element = df.loc[i, "site_type"]
+            central_element = str(df.loc[i, "site_type"])
             bonded_atoms = []
 
             for neighbor_supercell_idx in neighbors[i]:
@@ -647,11 +821,11 @@ class Framework(object):
                 ):
                     continue
 
-                distance = np.linalg.norm(
+                distance = float(np.linalg.norm(
                     cartesian_coordinates[i]
                     - supercell_coordinates[neighbor_supercell_idx]
-                )
-                neighbor_element = df.loc[neighbor_original_idx, "site_type"]
+                ))
+                neighbor_element = str(df.loc[neighbor_original_idx, "site_type"])
 
                 if is_bonded(neighbor_element, central_element, distance):
                     bonded_atoms.append((neighbor_original_idx, distance))
@@ -770,7 +944,17 @@ class Framework(object):
         system: pd.DataFrame,
         vectors: tuple[np.ndarray, np.ndarray, np.ndarray],
     ) -> None:
-        """Write system in extxyz file format."""
+        """Write system in extxyz file format.
+
+        Arguments
+        ---------
+        file_name : str
+            Base name for the output file (without extension).
+        system : pd.DataFrame
+            DataFrame containing the system with columns ['site_label', 'cartesian_x', 'cartesian_y', 'cartesian_z'].
+        vectors : tuple of np.ndarray
+            Tuple containing the three cell vectors as numpy arrays.
+        """
         n_sites = system.shape[0]
         flat_vectors = np.concatenate(vectors)
         vectors_str = " ".join(f"{x:.10f}" for x in flat_vectors)
@@ -789,6 +973,22 @@ class Framework(object):
         Recipe from the DL_POLY Algorithm
         https://doi.org/10.1080/002689798167881
         thanks to Daniel W. Siderius
+
+        Arguments
+        ---------
+        cutoff : float
+            real space cutoff in Angstroms
+        box : tuple
+            box parameters (lx, ly, lz, xy, xz, yz)
+        tolerance : float
+            desired accuracy for the Ewald summation
+
+        Returns
+        -------
+        alpha : float
+            Ewald splitting parameter in Angstroms^-1
+        kmax : list
+            maximum k-vector components in each direction
         """
         eps = min(tolerance, 0.5)
         xi = np.sqrt(np.abs(np.log(eps * cutoff)))
@@ -801,12 +1001,32 @@ class Framework(object):
     def write_fstprt(
         self,
         file_name: str | Path,
-        unit_cells: tuple[int, int, int] = (1, 1, 1),
+        unit_cells: Tuple[int, int, int] = (1, 1, 1),
         cutoff: float = 12.8,
         return_metadata: bool = False,
         ewald_tolerance: float = 0.00001,
     ) -> None | dict:
-        """Write molecule file with framework for FEASST simulation software."""
+        """Write molecule file with framework for FEASST simulation software.
+
+        Arguments
+        ---------
+        file_name : str or Path
+            Base name for the output file (without extension).
+        unit_cells : Tuple[int, int, int]
+            Number of unit cells to replicate in (x, y, z) directions. Default is (1, 1, 1).
+        cutoff : float
+            Cutoff distance for non-bonded interactions in Angstroms. Default is 12.8.
+        return_metadata : bool
+            If True, return metadata dictionary. Default is False.
+        ewald_tolerance : float
+            Desired accuracy for the Ewald summation. Default is 1e-5.
+
+        Returns
+        -------
+        None or dict
+            If return_metadata is True, returns a dictionary with metadata about the system.
+            Otherwise, returns None.
+        """
         if len(unit_cells) != 3 or not all(isinstance(n, int) for n in unit_cells):
             raise ValueError("`unit_cells` must be three positive integers")
 
